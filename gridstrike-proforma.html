@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GRIDSTRIKE — Financial Proforma</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,-apple-system,sans-serif;background:#f1f5f9;color:#0f172a;min-height:100vh}
+    .label{font-size:11px;color:#64748b;margin-bottom:4px;display:block;font-weight:600;letter-spacing:.3px}
+    .card-title{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+    .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+    .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+    .g6{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+    .content{padding:24px;max-width:1320px;margin:0 auto}
+    .iw{position:relative}
+    .iw .pre{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:12px;font-weight:600;pointer-events:none}
+    .iw .suf{position:absolute;right:9px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:12px;pointer-events:none}
+    input[type=number],select,input[type=text]{width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 9px;color:#0f172a;font-size:13px;outline:none;transition:border-color .15s}
+    input:focus,select:focus{border-color:#00E564;background:#fff;box-shadow:0 0 0 3px rgba(0,229,100,.1)}
+    .hp{padding-left:20px!important}.hs{padding-right:26px!important}
+    .btn{background:#00E564;color:#000;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer}
+    .btn:hover{background:#00c455}
+    .btn-sm{background:#d4fce8;color:#00904a;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer}
+    .btn-del{background:transparent;color:#e11d48;border:1px solid #fda4af;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{text-align:left;padding:8px 12px;font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #f1f5f9}
+    td{padding:10px 12px;border-bottom:1px solid #f8fafc}
+    .plr{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f1f5f9}
+    .mc{border-radius:10px;padding:16px 18px;background:#fff;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+    .tab-bar{display:flex;border-bottom:2px solid #e2e8f0;background:#fff;padding:0 24px}
+    .tab-btn{padding:13px 16px;cursor:pointer;font-size:13px;font-weight:600;color:#94a3b8;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+    .tab-btn:hover{color:#475569}
+    .tab-btn.active{color:#00904a;border-bottom-color:#00904a}
+    .usc{padding:12px 14px;border-radius:8px;cursor:pointer;margin-bottom:8px;border:1px solid #e2e8f0;transition:all .15s}
+    .usc:hover{border-color:#bae6fd;background:#f0f9ff}
+    .hint{padding:9px 13px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;font-size:11px;color:#94a3b8;margin-top:10px}
+    .sdiv{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;padding:14px 0 10px;border-top:1px solid #f1f5f9;margin-top:8px}
+    .lsec{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-top:10px}
+    .lsec-title{font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px}
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:#f1f5f9}
+    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// ─── Constants ─────────────────────────────────────────────────────────────
+const RAMP=[.50,.70,.88,1.00,1.00];
+const CY='#00E564',PK='#e11d48',GR='#16a34a',AM='#d97706',PU='#7c3aed';
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const CX_ROWS=['Arch & Engineering','Permitting Fees','General Contracting','Squarena Tiles','Brand Finishes','Exterior Signage','Opening Inventory','Grand Opening Marketing'];
+// DEFCAPEX[rowIdx][colIdx] where colIdx 0=2rooms … 4=6rooms
+const DEFCAPEX=[[12000,14000,17000,20000,23000],[3500,4000,5000,6000,7000],[48000,58000,70000,82000,95000],[50000,75000,100000,125000,150000],[15000,18000,21000,24000,27000],[5000,5500,6000,6500,7000],[8000,9000,10000,11000,12000],[5000,6000,7000,8000,9000]];
+const OX_ROWS=['Rent','Supplies','Labor','Marketing','Misc'];
+// DEFOPEX[rowIdx][colIdx] monthly costs — maps to rent,mCogs,mLabor,mMktg,mMisc
+const DEFOPEX=[[6500,8500,10500,12500,14500],[2500,3000,3500,4000,4500],[9250,11000,13000,15000,17000],[1500,2000,2500,3000,3500],[1500,2000,2500,3000,3500]];
+const CURVE_OPTS=[
+  {v:'flat',            l:'Flat Line'},
+  {v:'moderate_flux',   l:'Moderate Fluctuation'},
+  {v:'trail_off',       l:'Moderate Trail-Off'},
+  {v:'steep_decline',   l:'Steep Decline'},
+  {v:'increase',        l:'Increasing Popularity'},
+  {v:'viral',           l:'Viral Moment'},
+  {v:'rocky_middle',    l:'Rocky Middle'},
+  {v:'summer_slump',    l:'Summer Slump'},
+  {v:'winter_slump',    l:'Winter Slump'},
+  {v:'slow_starter',    l:'Slow Starter'},
+];
+function curveMult(curve,month,openMonth){
+  switch(curve){
+    case 'flat': return 1.0;
+    case 'moderate_flux':
+      return Math.max(0.78,1.0
+        +Math.sin(month*0.47+openMonth)*0.09
+        +Math.sin(month*1.23+openMonth*0.7)*0.05
+        +Math.sin(month*0.11)*0.04);
+    case 'trail_off':
+      return 1.0-(month/59)*0.24;
+    case 'steep_decline':
+      return Math.max(0.45,1.0-(month/59)*0.50);
+    case 'increase':
+      return 1.0+(month/59)*0.22;
+    case 'viral':{
+      const pk=20;
+      return 1.0+0.42*Math.exp(-Math.pow(month-pk,2)/60)+(month>pk?0.07:0);
+    }
+    case 'rocky_middle':
+      if(month<12)return 1.0;
+      if(month<=36)return 1.0-0.18*Math.sin((month-12)/24*Math.PI);
+      return 1.04;
+    case 'summer_slump':{
+      const cm=(openMonth-1+month)%12;
+      const dist=Math.min(Math.abs(cm-6),12-Math.abs(cm-6));
+      return 1.0-Math.max(0,0.32*(1-Math.pow(dist/3.5,2)));
+    }
+    case 'winter_slump':{
+      const cm=(openMonth-1+month)%12;
+      const dist=Math.min(cm,12-cm);
+      return 1.0-Math.max(0,0.28*(1-Math.pow(dist/2.5,2)));
+    }
+    case 'slow_starter':
+      return Math.min(1.0,0.65+(month/36)*0.35);
+    default: return 1.0;
+  }
+}
+function annualCurveMult(u,yearIdx){
+  const curve=u.curve||'flat';
+  if(curve==='flat')return 1.0;
+  let sum=0;
+  for(let m=yearIdx*12;m<(yearIdx+1)*12;m++)sum+=curveMult(curve,m,u.om);
+  return sum/12;
+}
+
+// ─── State ─────────────────────────────────────────────────────────────────
+const DEFCOMP=Array.from({length:20},()=>({devFee:35000,revShare:10,equity:0}));
+const DEFEQTIERS=[{t:1,p:3},{t:10,p:6},{t:20,p:10}];
+// devFeeTiers: stores 1–t get this fee; t is the upper bound (last tier = ∞)
+const DEFDFTIERS=[{t:3,f:40000},{t:6,f:35000},{t:10,f:30000},{t:999,f:25000}];
+const DEFAULTS={
+  tab:'setup',sel:1,
+  rev:{sessions:5,price:130,util:85,addon:8},
+  costs:{},
+  ramp:[.50,.70,.88,1.00,1.00],
+  capexMatrix:DEFCAPEX.map(r=>[...r]),
+  opexMatrix:DEFOPEX.map(r=>[...r]),
+  comp:DEFCOMP.map(c=>({...c})),
+  distributions:[0,0,0,0,0],
+  retentionRates:[10,10,10,10,10],
+  capexPaybackRate:90,
+  equityTiers:DEFEQTIERS.map(t=>({...t})),
+  devFeeTiers:DEFDFTIERS.map(t=>({...t})),
+  units:[
+    {id:1,name:'Location 1',    om:1,oy:2026,rooms:2,capex:150000,rent:8438,mCogs:2500,mLabor:9250,mMktg:1500,mMisc:1500},
+    
+  ]
+};
+function migrateState(s){
+  if(!s.comp){s.comp=Array.from({length:20},(_,i)=>({devFee:s.units[i]?.devFee||35000,revShare:s.units[i]?.revShare||10,equity:0}));}
+  if(!s.distributions)s.distributions=[0,0,0,0,0];
+  if(!s.ramp)s.ramp=[.50,.70,.88,1.00,1.00];
+  if(!s.capexMatrix)s.capexMatrix=DEFCAPEX.map(r=>[...r]);
+  if(!s.opexMatrix)s.opexMatrix=DEFOPEX.map(r=>[...r]);
+  if(!s.retentionRates)s.retentionRates=[10,10,10,10,10];
+  if(!s.capexPaybackRate)s.capexPaybackRate=90;
+  if(!s.equityTiers)s.equityTiers=DEFEQTIERS.map(t=>({...t}));
+  if(!s.devFeeTiers)s.devFeeTiers=DEFDFTIERS.map(t=>({...t}));
+  while(s.comp.length<20)s.comp.push({devFee:35000,revShare:10,equity:0});
+  s.units=s.units.map(u=>u.curve?u:{...u,curve:'flat'});
+  return s;
+}
+
+function fleetEquityPct(){
+  const tiers=S.equityTiers||DEFEQTIERS;
+  const n=S.units.length;
+  let pct=0;
+  for(const tier of tiers){if(n>=tier.t)pct=tier.p;}
+  return pct;
+}
+// equity % for a given fleet size (parameterized version of fleetEquityPct)
+function equityPctForFleet(n){
+  const tiers=S.equityTiers||DEFEQTIERS;
+  let pct=0;
+  for(const tier of tiers){if(n>=tier.t)pct=tier.p;}
+  return pct;
+}
+// how many stores are open at a given calendar year+month (1-based month)
+function fleetSizeAt(calYear,calMonth){
+  return S.units.filter(u=>u.oy<calYear||(u.oy===calYear&&u.om<=calMonth)).length;
+}
+// storeDevFee: returns dev fee for store at position storeNum (1-based)
+function storeDevFee(storeNum){
+  const tiers=S.devFeeTiers||DEFDFTIERS;
+  for(const tier of tiers){if(storeNum<=tier.t)return tier.f;}
+  return tiers[tiers.length-1].f;
+}
+function capexForRooms(rooms){
+  const mx=S.capexMatrix||DEFCAPEX;
+  const col=Math.max(0,Math.min(4,rooms-2));
+  return mx.reduce((s,row)=>s+(row[col]||0),0);
+}
+function opexForRooms(rooms){
+  const mx=S.opexMatrix||DEFOPEX;
+  const col=Math.max(0,Math.min(4,rooms-2));
+  return{rent:mx[0][col],mCogs:mx[1][col],mLabor:mx[2][col],mMktg:mx[3][col],mMisc:mx[4][col]};
+}
+let nid=3;
+let S={...DEFAULTS,comp:DEFAULTS.comp.map(c=>({...c}))};
+try{const raw=localStorage.getItem('sq-state');if(raw){S=migrateState(JSON.parse(raw));nid=Math.max(...S.units.map(u=>u.id))+1;}}catch(e){}
+function save(){try{localStorage.setItem('sq-state',JSON.stringify(S));}catch(e){}}
+
+// ─── Local Save Only ──────────────────────────────────────────────────────────
+let syncStatus='saved';
+function ghLoad(){render();}
+function ghSave(){save();}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+const $=n=>'$'+Math.round(n).toLocaleString('en-US');
+const $k=n=>'$'+(Math.abs(n)/1000).toFixed(0)+'k';
+const $m=n=>Math.abs(n)>=1e6?'$'+(n/1e6).toFixed(2)+'M':$(n);
+const P=n=>n.toFixed(1)+'%';
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// ─── Calc ──────────────────────────────────────────────────────────────────
+function cu(u,ramp=1,idx=null){
+  const r=S.rev,c=S.costs;
+  const i=idx!==null?idx:S.units.findIndex(x=>x.id===u.id);
+  const comp=(i>=0&&S.comp&&S.comp[i])?S.comp[i]:{devFee:u.devFee||35000,revShare:u.revShare||10,equity:0};
+  const devFee=storeDevFee(i+1); // tier-based dev fee by store position (1-based)
+  const sessRev=u.rooms*r.sessions*r.price*(r.util/100)*365*ramp;
+  const addonRev=sessRev*r.addon/100;
+  const rev=sessRev+addonRev;
+  const cogs=u.mCogs*12,labor=u.mLabor*12,rent=u.rent*12,mktg=u.mMktg*12,misc=u.mMisc*12;
+  const opexPre=cogs+labor+rent+mktg+misc;
+  const ebitda=rev-opexPre;
+  const margin=rev>0?ebitda/rev*100:0;
+  const tCapex=u.capex;
+  const payback=ebitda>0?tCapex/ebitda:Infinity;
+  const coc=tCapex>0?ebitda/tCapex*100:0;
+  return{sessRev,addonRev,rev,cogs,labor,rent,mktg,misc,opexPre,ebitda,margin,tCapex,payback,coc,comp};
+}
+
+function port(){
+  const res=S.units.map((u,i)=>({...u,c:cu(u,1*annualCurveMult(u,4),i)}));
+  const tRev=res.reduce((s,r)=>s+r.c.rev,0);
+  const tEB=res.reduce((s,r)=>s+r.c.ebitda,0);
+  const tCX=res.reduce((s,r)=>s+r.c.tCapex,0);
+  return{res,tRev,tEB,tCX,blend:tRev>0?tEB/tRev*100:0,payback:tEB>0?tCX/tEB:Infinity,coc:tCX>0?tEB/tCX*100:0};
+}
+
+function fy5(){
+  const minY=Math.min(...S.units.map(u=>u.oy));
+  return Array.from({length:5},(_,i)=>{
+    const yr=minY+i;
+    let rev=0,eb=0;
+    S.units.forEach((u,ui)=>{
+      const n=yr-u.oy;
+      if(n<0)return;
+      const ramp=(S.ramp||RAMP)[Math.min(n,4)]*annualCurveMult(u,n);
+      const c=cu(u,ramp,ui);
+      rev+=c.rev;eb+=c.ebitda;
+    });
+    return{yr,rev,eb,margin:rev>0?eb/rev*100:0};
+  });
+}
+
+// ─── UI Helpers ────────────────────────────────────────────────────────────
+function fmtN(v){
+  const n=parseFloat(String(v).replace(/,/g,''));
+  if(isNaN(n))return v;
+  if(Math.abs(n)>=1000){
+    const parts=n.toFixed(Number.isInteger(n)?0:2).split('.');
+    parts[0]=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,',');
+    return parts[1]==='00'?parts[0]:parts.join('.');
+  }
+  return String(v);
+}
+function niFocus(el){el.value=el.value.replace(/,/g,'');}
+function niBlur(el){const n=parseFloat(el.value);if(!isNaN(n))el.value=fmtN(n);}
+
+function ni(id,label,val,{pre,suf,step=1,min,max}={}){
+  const disp=fmtN(val);
+  return`<div>
+    <label class="label" for="${id}">${esc(label)}</label>
+    <div class="iw">
+      ${pre?`<span class="pre">${esc(pre)}</span>`:''}
+      <input type="text" inputmode="decimal" id="${id}" value="${disp}"
+        class="${pre?'hp':''} ${suf?'hs':''}"
+        onfocus="niFocus(this)" onblur="niBlur(this)"
+        onchange="inp('${id}',this.value.replace(/,/g,''))">
+      ${suf?`<span class="suf">${esc(suf)}</span>`:''}
+    </div></div>`;
+}
+
+function pr(label,val,color='#334155',bold=false,indent=false,sz=13){
+  return`<div class="plr" style="${indent?'padding-left:14px':''}">
+    <span style="font-size:${sz}px;color:${bold?'#1e293b':'#64748b'};${bold?'font-weight:700':''}">${label}</span>
+    <span style="font-size:${sz}px;font-weight:${bold?700:500};color:${color}">${val}</span>
+  </div>`;
+}
+
+function mc(label,val,accent,sub=''){
+  return`<div class="mc" style="border-top:3px solid ${accent}">
+    <div style="font-size:19px;font-weight:700;color:${accent};line-height:1.3">${esc(val)}</div>
+    ${sub?`<div style="font-size:11px;color:#94a3b8;margin-top:2px">${esc(sub)}</div>`:''}
+    <div style="font-size:11px;color:#94a3b8;margin-top:5px">${esc(label)}</div>
+  </div>`;
+}
+
+const LOGO=`<div style="font-size:22px;font-weight:900;letter-spacing:3px;color:#00E564;font-family:system-ui,sans-serif">GRID<span style="color:#E8204E">STRIKE</span></div>`;
+
+// ─── Tab: Locations ────────────────────────────────────────────────────────
+function rLoc(){
+  const yrs=[2024,2025,2026,2027,2028,2029,2030];
+  const ro=s=>`<div style="padding:7px 10px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;color:#334155;font-weight:600">${s}</div>`;
+  const uHTML=S.units.map((u,i)=>{
+    const comp=(S.comp&&S.comp[i])||{devFee:35000,revShare:10,equity:0};
+    const sn=String(i+1).padStart(2,'0');
+    const totalOpex=u.rent+u.mCogs+u.mLabor+u.mMktg+u.mMisc;
+    return`
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:18px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="display:flex;align-items:center;flex:1;margin-right:12px;gap:10px">
+          <span style="font-size:11px;font-weight:700;color:#fff;background:#94a3b8;border-radius:4px;padding:3px 8px;white-space:nowrap">STORE ${sn}</span>
+          <input type="text" id="un-${u.id}" value="${esc(u.name)}"
+            style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:7px 10px;color:#0f172a;font-size:15px;font-weight:700;flex:1;outline:none"
+            onchange="inp('un-${u.id}',this.value)">
+        </div>
+        ${S.units.length>1?`<button class="btn-del" onclick="delUnit(${u.id})">Remove</button>`:''}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <label class="label">Open Month</label>
+          <select id="uom-${u.id}" oninput="inp('uom-${u.id}',this.value)">
+            ${MONTHS.map((m,mi)=>`<option value="${mi+1}"${u.om==mi+1?' selected':''}>${m}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="label">Open Year</label>
+          <select id="uoy-${u.id}" oninput="inp('uoy-${u.id}',this.value)">
+            ${yrs.map(y=>`<option value="${y}"${u.oy==y?' selected':''}>${y}</option>`).join('')}
+          </select>
+        </div>
+        ${ni(`ur-${u.id}`,'Rooms',u.rooms,{step:1,min:1,max:6})}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <label class="label">Total CAPEX <span style="font-weight:400;color:#94a3b8">(from calculator)</span></label>
+          ${ro($(u.capex))}
+        </div>
+        <div>
+          <label class="label">Total Monthly OPEX <span style="font-weight:400;color:#94a3b8">(from calculator · ${$(totalOpex*12)}/yr)</span></label>
+          ${ro($(totalOpex)+'/mo')}
+        </div>
+      </div>
+
+    </div>`;
+  }).join('');
+
+  return`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="card-title" style="margin-bottom:0">Your Locations</div>
+      <button class="btn" onclick="addUnit()">+ Add Location</button>
+    </div>${uHTML}</div>`;
+}
+
+// ─── Tab: Performance ───────────────────────────────────────────────────────
+function rPerf(){
+  if(!S.units.length)return`<div class="card">No locations defined yet.</div>`;
+  return S.units.map((u,idx)=>{
+    const curve=u.curve||'flat';
+    const mature=cu(u,1,idx);
+    const baseMonthly=mature.rev/12;
+    // 60 monthly revenues: baseline (ramp only) and selected curve
+    const baseRevs=Array.from({length:60},(_,m)=>{
+      const yr=Math.floor(m/12);
+      return baseMonthly*(S.ramp||RAMP)[Math.min(yr,4)];
+    });
+    const curveRevs=Array.from({length:60},(_,m)=>{
+      const yr=Math.floor(m/12);
+      return baseMonthly*(S.ramp||RAMP)[Math.min(yr,4)]*curveMult(curve,m,u.om);
+    });
+    // SVG
+    const W=600,H=160,PL=58,PR=16,PT=10,PB=28;
+    const cW=W-PL-PR,cH=H-PT-PB;
+    const maxV=Math.max(...curveRevs,...baseRevs)*1.08;
+    const px=i=>PL+(i/59)*cW;
+    const py=v=>PT+cH-(v/maxV)*cH;
+    const bPath=baseRevs.map((v,i)=>`${i?'L':'M'}${px(i).toFixed(1)},${py(v).toFixed(1)}`).join('');
+    const cPath=curveRevs.map((v,i)=>`${i?'L':'M'}${px(i).toFixed(1)},${py(v).toFixed(1)}`).join('');
+    // year dividers + labels
+    const dividers=[12,24,36,48].map(m=>`<line x1="${px(m).toFixed(1)}" y1="${PT}" x2="${px(m).toFixed(1)}" y2="${PT+cH}" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3,3"/>`).join('');
+    const yLabels=[0,1,2,3,4].map(y=>`<text x="${(px(y*12+6)).toFixed(1)}" y="${PT+cH+18}" text-anchor="middle" font-size="10" fill="#94a3b8">Y${y+1} (${u.oy+y})</text>`).join('');
+    const vLabels=[0,0.5,1].map(p=>{
+      const v=maxV*p;
+      return`<text x="${PL-5}" y="${(py(v)+4).toFixed(1)}" text-anchor="end" font-size="9" fill="#94a3b8">${v>=1000?'$'+(v/1000).toFixed(0)+'k':'$'+v.toFixed(0)}</text>`;
+    }).join('');
+    const sn=String(idx+1).padStart(2,'0');
+    const curveName=(CURVE_OPTS.find(o=>o.v===curve)||{l:'Flat Line'}).l;
+    // 5-yr total under curve vs base
+    const baseTotal=baseRevs.reduce((s,v)=>s+v,0);
+    const curveTotal=curveRevs.reduce((s,v)=>s+v,0);
+    const diff=curveTotal-baseTotal;
+    return`<div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:11px;font-weight:700;color:#fff;background:#94a3b8;border-radius:4px;padding:3px 8px">STORE ${sn}</span>
+          <span style="font-weight:700;color:#334155;font-size:15px">${esc(u.name)}</span>
+          <span style="font-size:11px;color:#94a3b8">Opens ${MONTHS[u.om-1].slice(0,3)} ${u.oy} · ${u.rooms} rooms</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="font-size:11px;color:#64748b;font-weight:600">Performance Curve:</label>
+          <select onchange="inp('curve-${u.id}',this.value)" style="font-size:12px;padding:5px 10px;border:1px solid #e2e8f0;border-radius:6px;color:#334155;background:#fff">
+            ${CURVE_OPTS.map(o=>`<option value="${o.v}"${curve===o.v?' selected':''}>${o.l}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <svg width="100%" viewBox="0 0 ${W} ${H}" style="overflow:visible;display:block">
+        ${dividers}
+        <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${PT+cH}" stroke="#cbd5e1" stroke-width="1"/>
+        <line x1="${PL}" y1="${PT+cH}" x2="${PL+cW}" y2="${PT+cH}" stroke="#cbd5e1" stroke-width="1"/>
+        <path d="${bPath}" fill="none" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="5,3"/>
+        <path d="${cPath}" fill="none" stroke="${CY}" stroke-width="2.5"/>
+        ${yLabels}${vLabels}
+      </svg>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:20px;font-size:11px;color:#94a3b8;flex-wrap:wrap">
+        <span><svg width="22" height="10"><line x1="0" y1="5" x2="22" y2="5" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="5,3"/></svg> Flat Ramp (Base)</span>
+        <span><svg width="22" height="10"><line x1="0" y1="5" x2="22" y2="5" stroke="${CY}" stroke-width="2.5"/></svg> ${curveName}</span>
+        <span style="margin-left:auto;color:${diff>=0?GR:PK};font-weight:600">${diff>=0?'+':''}${$(diff)} vs. base over 5 yrs</span>
+        <span style="color:#64748b">Mature monthly: <strong>${$(mature.rev/12)}</strong></span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─── Tab: Setup ────────────────────────────────────────────────────────────
+function rSetup(){
+  const r=S.rev,c=S.costs;
+  const sample=cu({id:0,rooms:2,capex:150000,rent:6500,om:1,oy:2026,
+    mCogs:2500,mLabor:9250,mMktg:1500,mMisc:1500,devFee:35000,revShare:10});
+  return`
+    <div class="card">
+      <div class="card-title">Revenue Assumptions</div>
+      <div class="g4">
+        ${ni('r-s','Sessions / Room / Day',r.sessions,{step:.5})}
+        ${ni('r-p','Avg Price / Session',r.price,{pre:'$',step:5})}
+        ${ni('r-u','Utilization Rate',r.util,{suf:'%',step:1})}
+        ${ni('r-a','Add-On Revenue',r.addon,{suf:'%',step:.5})}
+      </div>
+      <div class="hint">
+        Session revenue = rooms × sessions/day × price × utilization × 365
+        &nbsp;·&nbsp; Add-on = food, beverage, merch (% of session rev)
+        &nbsp;·&nbsp; Implied 2-room annual revenue: <strong style="color:${CY}">${$(sample.rev)}</strong>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">CAPEX Calculator Assumptions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(auto-fills CAPEX when a location's room count is set)</span></div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th style="text-align:left;min-width:170px">Cost Item</th>
+            ${[2,3,4,5,6].map(r=>`<th>${r} Rooms</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${CX_ROWS.map((label,ri)=>`
+              <tr style="background:${ri%2===0?'#fff':'#fafbfc'}">
+                <td style="color:#334155;font-weight:500">${label}</td>
+                ${[0,1,2,3,4].map(ci=>`
+                  <td><div class="iw"><span class="pre">$</span>
+                    <input type="text" inputmode="decimal" id="cxm-${ri}-${ci}"
+                      value="${fmtN((S.capexMatrix||DEFCAPEX)[ri][ci])}"
+                      class="hp"
+                      onfocus="niFocus(this)" onblur="niBlur(this)"
+                      onchange="inp('cxm-${ri}-${ci}',this.value.replace(/,/g,''))"
+                      style="width:100px">
+                  </div></td>`).join('')}
+              </tr>`).join('')}
+            <tr style="background:#f0f9ff;font-weight:700;border-top:2px solid #bae6fd">
+              <td style="color:#0284c7">Total CAPEX</td>
+              ${[0,1,2,3,4].map(ci=>`
+                <td style="color:${CY}">${$((S.capexMatrix||DEFCAPEX).reduce((s,r)=>s+r[ci],0))}</td>`).join('')}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">OPEX Calculator Assumptions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(monthly costs — auto-fills when a location's room count is set)</span></div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th style="text-align:left;min-width:130px">Cost Item</th>
+            ${[2,3,4,5,6].map(r=>`<th>${r} Rooms</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${OX_ROWS.map((label,ri)=>`
+              <tr style="background:${ri%2===0?'#fff':'#fafbfc'}">
+                <td style="color:#334155;font-weight:500">${label}</td>
+                ${[0,1,2,3,4].map(ci=>`
+                  <td><div class="iw"><span class="pre">$</span>
+                    <input type="text" inputmode="decimal" id="oxm-${ri}-${ci}"
+                      value="${fmtN((S.opexMatrix||DEFOPEX)[ri][ci])}"
+                      class="hp"
+                      onfocus="niFocus(this)" onblur="niBlur(this)"
+                      onchange="inp('oxm-${ri}-${ci}',this.value.replace(/,/g,''))"
+                      style="width:100px">
+                  </div></td>`).join('')}
+              </tr>`).join('')}
+            <tr style="background:#f0fdf4;font-weight:700;border-top:2px solid #bbf7d0">
+              <td style="color:${GR}">Total / Mo</td>
+              ${[0,1,2,3,4].map(ci=>`
+                <td style="color:${GR}">${$((S.opexMatrix||DEFOPEX).reduce((s,r)=>s+r[ci],0))}</td>`).join('')}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Revenue Ramp <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(% of steady-state revenue by year since open)</span></div>
+      <table style="width:260px">
+        <thead><tr><th>Year Since Open</th><th>Ramp %</th></tr></thead>
+        <tbody>${(S.ramp||RAMP).map((v,i)=>`
+          <tr style="background:${i%2===0?'#fff':'#fafbfc'}">
+            <td style="color:#334155;font-weight:600">Year ${i+1}</td>
+            <td><div class="iw"><input type="number" id="ramp-${i}" value="${+(v*100).toFixed(1)}" step="1" min="1" max="200" class="hp" onchange="inp('ramp-${i}',this.value)" style="width:90px"><span class="suf">%</span></div></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">CAPEX Payback <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(% of each store's monthly EBITDA diverted to CAPEX payback until fully repaid)</span></div>
+      <div style="max-width:280px">
+        ${ni('capex-pr','CAPEX Payback Rate',S.capexPaybackRate||90,{suf:'%',step:5,min:0,max:100})}
+      </div>
+      <div class="hint" style="margin-top:12px">Each month, this % of that store's monthly EBITDA is diverted to its own CAPEX balance until paid off. Cash Flow table shows the annualized total (monthly × 12).</div>
+    </div>`;
+}
+
+// ─── Tab: Unit P&L ─────────────────────────────────────────────────────────
+function rUnits(){
+  const all=S.units.map((u,i)=>({...u,c:cu(u,1*annualCurveMult(u,4),i)}));
+  const selIdx=Math.max(0,S.units.findIndex(u=>u.id===S.sel));
+  const sel=all[selIdx]||all[0];
+  const c=sel.c,r=S.rev,cs=S.costs;
+  const selComp=c.comp||{devFee:35000,revShare:10,equity:0};
+
+  const cards=all.map(u=>`
+    <div class="usc" onclick="setSel(${u.id})"
+      style="${u.id===S.sel?'background:#eff6ff;border-color:#bae6fd':'background:#fff'}">
+      <div style="font-weight:700;color:${u.id===S.sel?CY:'#334155'};font-size:14px">${esc(u.name)}</div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:2px">${u.rooms}rm · ${MONTHS[u.om-1].slice(0,3)} ${u.oy} · ${$(u.rent)}/mo rent</div>
+      <div style="font-size:12px;font-weight:600;margin-top:5px;color:${u.c.ebitda>0?CY:PK}">
+        EBITDA ${$(u.c.ebitda)} (${P(u.c.margin)}) · Payback ${u.c.payback<50?u.c.payback.toFixed(1)+'y':'—'}
+      </div>
+    </div>`).join('');
+
+  // Y1 CoC using actual ramp[0], not mature
+  const y1c=cu(sel,(S.ramp||RAMP)[0]*annualCurveMult(sel,0),selIdx);
+  const y1coc=c.tCapex>0?y1c.ebitda/c.tCapex*100:0;
+  // Actual payback by walking ramp years (mirrors table logic)
+  let cumPB=0,actualPayback=Infinity;
+  for(let pi=0;pi<(S.ramp||RAMP).length;pi++){
+    const prc=cu(sel,(S.ramp||RAMP)[pi]*annualCurveMult(sel,pi),selIdx);
+    const prev=cumPB;
+    cumPB+=prc.ebitda;
+    if(cumPB>=c.tCapex){actualPayback=pi+(c.tCapex-prev)/prc.ebitda;break;}
+  }
+
+  const mets=[
+    {l:'Annual Revenue',          v:$(c.rev),                                        a:CY},
+    {l:'Total CAPEX',             v:$(c.tCapex),                                     a:'#94a3b8'},
+    {l:'Y1 Cash on Cash Return',  v:P(y1coc),                                        a:y1coc>20?GR:AM},
+    {l:'Full Payback (in yrs)',   v:actualPayback<50?actualPayback.toFixed(1)+' yrs':'N/A', a:'#94a3b8'},
+    {l:'Mature EBITDA',           v:`${$(c.ebitda)} (${P(c.margin)})`,               a:c.ebitda>0?CY:PK},
+  ].map(m=>mc(m.l,m.v,m.a)).join('');
+
+  const cRows=[
+    ['COGS / Supplies',   c.cogs,  `${$(sel.mCogs)}/mo fixed`],
+    ['Labor',             c.labor, `${$(sel.mLabor)}/mo fixed`],
+    ['Rent',              c.rent,  `${$(sel.rent)}/mo`],
+    ['Local Marketing',   c.mktg,  `${$(sel.mMktg)}/mo fixed`],
+    ['Misc / Admin',      c.misc,  `${$(sel.mMisc)}/mo fixed`],
+  ].map(([l,v,n])=>pr(
+    `${l} <span style="font-size:10px;color:#cbd5e1">${n}</span>`,
+    `(${$(v)})`,'#64748b',false,true)).join('');
+
+  let cum5=0;
+  const fy5rows=(S.ramp||RAMP).map((ramp,i)=>{
+    const yr=sel.oy+i;
+    const rc=cu(sel,ramp*annualCurveMult(sel,i),selIdx);
+    cum5+=rc.ebitda;
+    const paidBack=cum5>=c.tCapex;
+    const justPaid=paidBack&&(cum5-rc.ebitda)<c.tCapex;
+    const fixedOpex=rc.cogs+rc.labor+rc.rent+rc.mktg+rc.misc;
+    const royalties=rc.royal+rc.bd;
+    return`<tr style="background:${justPaid?'#f0fdf4':i%2===0?'#fff':'#fafbfc'};${justPaid?'font-weight:600':''}">
+      <td style="color:#334155">Year ${i+1} <span style="font-size:11px;color:#94a3b8;font-weight:400">(${yr})</span>
+        ${justPaid?`<span style="font-size:10px;font-weight:700;color:${GR};margin-left:6px">✓ Paid back</span>`:''}
+      </td>
+      <td style="color:#94a3b8">${ramp*100}%</td>
+      <td style="color:${CY}">${$(rc.rev)}</td>
+      <td style="color:#64748b">(${$(fixedOpex)})</td>
+
+      <td style="color:${rc.ebitda>0?CY:PK};font-weight:600">${$(rc.ebitda)}</td>
+      <td>${P(rc.margin)}</td>
+      <td style="color:${cum5>=c.tCapex?GR:'#334155'};font-weight:600">${$(cum5)}</td>
+    </tr>`;
+  }).join('');
+
+  return`<div style="display:grid;grid-template-columns:280px 1fr;gap:14px">
+    <div>
+      <div class="card"><div class="card-title">Select Location</div>${cards}</div>
+    </div>
+    <div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">${mets}</div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="card-title" style="margin-bottom:0">5-Year P&L — ${esc(sel.name)}</div>
+          <div style="font-size:11px;color:#94a3b8">Total CAPEX: <strong style="color:#334155">${$(c.tCapex)}</strong></div>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr>${['Year','Ramp','Revenue','OPEX','EBITDA','Margin','Cumulative EBITDA'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+            <tbody>${fy5rows}</tbody>
+          </table>
+        </div>
+        <div style="margin-top:12px;padding:10px 14px;background:${actualPayback<5?'#f0fdf4':'#f8fafc'};border:1px solid ${actualPayback<5?'#bbf7d0':'#e2e8f0'};border-radius:8px;font-size:12px;color:${actualPayback<5?'#15803d':'#64748b'}">
+          <strong>CAPEX Payback:</strong> ${actualPayback<50?actualPayback.toFixed(1)+' yrs':'N/A'} &nbsp;·&nbsp;
+          <strong>Y1 Cash-on-Cash:</strong> ${P(y1coc)} &nbsp;·&nbsp;
+          <strong>Steady-State EBITDA:</strong> ${$(cu(sel,1,selIdx).ebitda)}/yr
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ─── Tab: System P&L ────────────────────────────────────────────────────────
+function rSysPL(){
+  if(!S.units.length)return`<div class="card">No locations defined yet.</div>`;
+  const minY=Math.min(...S.units.map(u=>u.oy));
+  const data=Array.from({length:5},(_,i)=>{
+    const yr=minY+i;
+    let rev=0,cogs=0,labor=0,rent=0,mktg=0,misc=0;
+    S.units.forEach((u,ui)=>{
+      const n=yr-u.oy;if(n<0)return;
+      const ramp=(S.ramp||RAMP)[Math.min(n,4)]*annualCurveMult(u,n);
+      const c=cu(u,ramp,ui);
+      rev+=c.rev;cogs+=c.cogs;labor+=c.labor;rent+=c.rent;
+      mktg+=c.mktg;misc+=c.misc;
+    });
+    const fixedOpex=cogs+labor+rent+mktg+misc;
+    const ebitda=rev-fixedOpex;
+    return{yr,i,rev,cogs,labor,rent,mktg,misc,fixedOpex,ebitda,margin:rev>0?ebitda/rev*100:0};
+  });
+
+  const th=`<th style="text-align:right;min-width:120px">`;
+  const r=(label,fn,{color='#334155',bold=false,indent=false,sep=false,shade=false}={})=>`
+    <tr style="background:${shade?'#f8fafc':'#fff'};${sep?'border-top:2px solid #e2e8f0;':''}">
+      <td style="font-size:12px;color:${color};font-weight:${bold?700:500};padding-left:${indent?24:10}px;white-space:nowrap">${label}</td>
+      ${data.map(d=>`<td style="text-align:right;font-size:12px;color:${color};font-weight:${bold?700:500}">${fn(d)}</td>`).join('')}
+    </tr>`;
+
+  return`<div class="card">
+    <div class="card-title">System P&L — 5 Year</div>
+    <div style="overflow-x:auto"><table>
+      <thead>
+        <tr style="background:#f8fafc">
+          <th style="text-align:left;min-width:190px;font-size:10px;color:#94a3b8;font-weight:600">OPEN STORES</th>
+          ${data.map(d=>`<th style="text-align:right;font-size:12px;color:#334155;font-weight:700">${S.units.filter(u=>u.oy<=d.yr).length}</th>`).join('')}
+        </tr>
+        <tr>
+          <th style="text-align:left;min-width:190px"></th>
+          ${data.map(d=>`${th}Year ${d.i+1} (${d.yr})</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${r('Revenue',         d=>$(d.rev),          {color:CY,bold:true,shade:true})}
+        ${r('COGS / Supplies', d=>`(${$(d.cogs)})`,  {color:'#64748b',indent:true})}
+        ${r('Labor',           d=>`(${$(d.labor)})`, {color:'#64748b',indent:true})}
+        ${r('Rent',            d=>`(${$(d.rent)})`,  {color:'#64748b',indent:true})}
+        ${r('Marketing',       d=>`(${$(d.mktg)})`,  {color:'#64748b',indent:true})}
+        ${r('Misc / Admin',    d=>`(${$(d.misc)})`,  {color:'#64748b',indent:true})}
+        ${r('Total OPEX',      d=>`(${$(d.fixedOpex)})`, {color:'#334155',bold:true,sep:true,shade:true})}
+
+        ${r('EBITDA',          d=>`<span style="color:${d.ebitda>0?CY:PK}">${$(d.ebitda)}</span>`, {bold:true,sep:true,shade:true})}
+        ${r('EBITDA Margin',   d=>P(d.margin),        {color:'#94a3b8'})}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+// ─── Tab: Portfolio ─────────────────────────────────────────────────────────
+function rPort(){
+  const P2=port();
+  const tRooms=S.units.reduce((s,u)=>s+u.rooms,0);
+  const mets=[
+    {l:'Total System Annual Revenue at Maturity',  v:$(P2.tRev),                         a:CY},
+    {l:'Total System Annual EBITDA at Maturity',   v:$(P2.tEB), s:P(P2.blend)+' margin', a:CY},
+    {l:'', v:`${S.units.length} Locations · ${tRooms} Total Rooms`, a:PK},
+  ].map(m=>mc(m.l,m.v,m.a,m.s||'')).join('');
+
+  const rows=P2.res.map((u,i)=>`
+    <tr style="background:${i%2===0?'#fff':'#fafbfc'}">
+      <td style="font-weight:700;color:#334155">${esc(u.name)}</td>
+      <td>${u.rooms}</td>
+      <td>${MONTHS[u.om-1].slice(0,3)} ${u.oy}</td>
+      <td style="color:${CY};font-weight:600">${$(u.c.rev)}</td>
+      <td style="color:${u.c.ebitda>0?CY:PK};font-weight:600">${$(u.c.ebitda)}</td>
+      <td>${P(u.c.margin)}</td>
+      <td>${$(u.c.tCapex)}</td>
+      <td style="color:${u.c.coc>20?GR:AM}">${P(u.c.coc)}</td>
+      <td>${u.c.payback<50?u.c.payback.toFixed(1)+'y':'—'}</td>
+    </tr>`).join('');
+
+  return`
+    <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Annual Portfolio at Maturity</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">${mets}</div>
+    <div class="card">
+      <div class="card-title">Location Comparison</div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>${['Location','Rooms','Opens','Revenue','EBITDA','Margin','Total CAPEX','Return','Payback'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+          <tbody>
+            ${rows}
+            <tr style="background:#eff6ff;border-top:2px solid #bae6fd;font-weight:700">
+              <td colspan="3">TOTAL / BLENDED</td>
+              <td style="color:${CY}">${$(P2.tRev)}</td>
+              <td style="color:${CY}">${$(P2.tEB)}</td>
+              <td>${P(P2.blend)}</td>
+              <td>${$(P2.tCX)}</td>
+              <td style="color:${P2.coc>20?GR:AM}">${P(P2.coc)}</td>
+              <td>${P2.payback<50?P2.payback.toFixed(1)+'y':'—'}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ─── Tab: Cash Flow ──────────────────────────────────────────────────────────
+function rCashFlow(){
+  if(!S.units.length)return`<div class="card">No locations defined yet.</div>`;
+  const minY=Math.min(...S.units.map(u=>u.oy));
+  const retRates=S.retentionRates||[10,10,10,10,10];
+  const paybackRate=(S.capexPaybackRate||90)/100;
+  // Track per-store running CAPEX balance (CAPEX + Dev Fee)
+  const capexBal=S.units.map((u,ui)=>u.capex+storeDevFee(ui+1));
+  let cum=0;
+  const rows=Array.from({length:5},(_,i)=>{
+    const yr=minY+i;
+    const retPct=(retRates[i]||0)/100;
+    let ebitdaTot=0,totalRetention=0,totalPayback=0;
+    const capexOut=S.units.filter(u=>u.oy===yr).reduce((s,u)=>{
+      const ui=S.units.indexOf(u);
+      return s+u.capex+storeDevFee(ui+1);
+    },0);
+    S.units.forEach((u,ui)=>{
+      const n=yr-u.oy;if(n<0)return;
+      const rc=cu(u,(S.ramp||RAMP)[Math.min(n,4)]*annualCurveMult(u,n),ui);
+      ebitdaTot+=rc.ebitda;
+      // retention first, then payback from remainder
+      const storeRetention=Math.max(0,rc.ebitda)*retPct;
+      const storeAfterRetention=Math.max(0,rc.ebitda-storeRetention);
+      totalRetention+=storeRetention;
+      if(capexBal[ui]>0&&storeAfterRetention>0){
+        const pmt=Math.min(capexBal[ui],storeAfterRetention*paybackRate);
+        totalPayback+=pmt;
+        capexBal[ui]=Math.max(0,capexBal[ui]-pmt);
+      }
+    });
+    const distributions=ebitdaTot-capexOut-totalRetention-totalPayback;
+    const net=distributions; // distributions = all free cash after deductions
+    const start=cum;
+    cum+=net;
+    return{yr,ebitdaTot,capexOut,totalRetention,retPct,totalPayback,distributions,net,cum,start,i};
+  });
+  const tRows=rows.map(({yr,ebitdaTot,capexOut,totalRetention,retPct,totalPayback,distributions,net,cum,start,i})=>`
+    <tr style="background:${i%2===0?'#fff':'#fafbfc'}">
+      <td style="font-weight:700;color:#334155">Year ${i+1} <span style="font-size:11px;color:#94a3b8;font-weight:400">(${yr})</span></td>
+      <td style="color:${start>=0?GR:PK};font-weight:600">${$(start)}</td>
+      <td style="color:${ebitdaTot>0?CY:PK};font-weight:600">${$(ebitdaTot)}</td>
+      <td style="color:${capexOut>0?PK:'#94a3b8'}">${capexOut>0?'('+$(capexOut)+')':'\u2014'}</td>
+      <td>
+        <div class="iw"><span class="suf">%</span>
+          <input type="text" inputmode="decimal" id="ret-${i}" value="${retRates[i]||0}"
+            class="hs" onfocus="niFocus(this)" onblur="niBlur(this)"
+            onchange="inp('ret-${i}',this.value.replace(/,/g,''))" style="width:70px">
+        </div>
+        <div style="font-size:10px;color:#64748b;margin-top:3px">${totalRetention>0?'('+$(totalRetention)+')':'\u2014'}</div>
+      </td>
+      <td style="color:${totalPayback>0?AM:'#94a3b8'}">${totalPayback>0?'('+$(totalPayback)+')':'\u2014'}</td>
+      <td style="color:${distributions>=0?GR:PK};font-weight:600">${$(distributions)}</td>
+      <td style="color:${cum>=0?GR:PK};font-weight:700;font-size:14px">${$(cum)}</td>
+    </tr>`).join('');
+  return`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:0">5-Year Cash Flow</div>
+      <div style="font-size:11px;color:#94a3b8;text-align:right">
+        Retention = % of monthly EBITDA held as operating reserve &nbsp;·&nbsp;
+        CAPEX Payback = ${S.capexPaybackRate||90}% of post-retention EBITDA per store until repaid
+      </div>
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr>${['Year','Starting Cash','EBITDA','CAPEX Out','Retention','CAPEX Payback','Distributions','Ending Cash Position'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${tRows}</tbody>
+    </table></div>
+  </div>`;
+}
+// ─── Tab: 5-Year ────────────────────────────────────────────────────────────
+function rFY(){
+  const data=fy5();
+  let cum=0;
+  const rows=data.map((row,i)=>{
+    cum+=row.eb;
+    // Blended ramp: rooms-weighted average across all open stores this year
+    let wRamp=0,wRooms=0;
+    S.units.forEach(u=>{
+      const n=row.yr-u.oy;
+      if(n<0)return;
+      // ramp × curve multiplier, both aligned to year since open
+      wRamp+=(S.ramp||RAMP)[Math.min(n,4)]*annualCurveMult(u,n)*u.rooms;
+      wRooms+=u.rooms;
+    });
+    const blendPerf=wRooms>0?(wRamp/wRooms*100).toFixed(0)+'%':'—';
+    return`<tr style="background:${i%2===0?'#fff':'#fafbfc'}">
+      <td style="font-weight:700;color:#334155">Year ${i+1} <span style="font-size:11px;color:#94a3b8;font-weight:400">(${row.yr})</span></td>
+      <td style="color:${CY};font-weight:600">${$(row.rev)}</td>
+      <td style="color:${row.eb>0?CY:PK};font-weight:600">${$(row.eb)}</td>
+      <td>${P(row.margin)}</td>
+      <td style="color:#94a3b8">${blendPerf}</td>
+      <td style="color:${GR};font-weight:600">${$(cum)}</td>
+    </tr>`;
+  }).join('');
+
+  const P2=port();
+  return`
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+        <div class="card-title" style="margin-bottom:0">5-Year Portfolio Projection</div>
+        <div style="font-size:11px;color:#94a3b8;text-align:right">
+          Revenue ramp: ${(S.ramp||RAMP).map((v,i)=>`Y${i+1} ${(v*100).toFixed(0)}%`).join(' → ')} of steady-state<br>
+          Locations opening in future years contribute from their open year
+        </div>
+      </div>
+      <table>
+        <thead><tr>${['Year','Revenue','EBITDA','Margin','Blended Performance','Cumulative EBITDA'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:14px;padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;color:#15803d">
+        <strong>Total CAPEX Invested:</strong> ${$(P2.tCX)} &nbsp;·&nbsp;
+        <strong>Cumulative EBITDA by Year 5:</strong> ${$(data.reduce((s,r)=>s+r.eb,0))} &nbsp;·&nbsp;
+        <strong>Implied Payback:</strong> ${P2.payback<50?P2.payback.toFixed(1)+' yrs':'N/A'}
+      </div>
+    </div>`;
+}
+
+// ─── Tab: Monthly Cash Flow ──────────────────────────────────────────────────
+function rMonthlyCF(){
+  if(!S.units.length)return`<div class="card">No locations defined yet.</div>`;
+  const retRates=S.retentionRates||[10,10,10,10,10];
+  const paybackRate=(S.capexPaybackRate||90)/100;
+  const km=n=>{
+    const a=Math.abs(n);
+    if(a>=1000)return(n<0?'-':'')+'$'+(a/1000).toFixed(1)+'k';
+    return(n<0?'-$':'$')+Math.round(a);
+  };
+  return S.units.map((u,ui)=>{
+    const devFee=storeDevFee(ui+1);
+    let capexBal=u.capex;
+    const months=Array.from({length:60},(_,m)=>{
+      const yr=Math.floor(m/12);
+      const ramp=(S.ramp||RAMP)[Math.min(yr,4)];
+      const cMult=curveMult(u.curve||'flat',m,u.om);
+      const rc=cu(u,ramp*cMult,ui);
+      const mRev=rc.rev/12;
+      const mExp=rc.opexPre/12;
+      const mEB=rc.ebitda/12;
+      const retPct=(retRates[Math.min(yr,4)]||0)/100;
+      const mRetain=Math.max(0,mEB)*retPct;
+      const afterRet=Math.max(0,mEB-mRetain);
+      const mPayback=capexBal>0?Math.min(capexBal,afterRet*paybackRate):0;
+      capexBal=Math.max(0,capexBal-mPayback);
+      const mExcess=afterRet-mPayback;
+      const paid=capexBal===0;
+      // equity split — based on live fleet size at this calendar month
+      const calYear=u.oy+Math.floor((u.om-1+m)/12);
+      const calMonth=((u.om-1+m)%12)+1;
+      const fleetN=fleetSizeAt(calYear,calMonth);
+      const erikPct=equityPctForFleet(fleetN)/100;
+      const mErik=mExcess*erikPct;
+      const mJXJ=mExcess-mErik;
+      return{mRev,mExp,mEB,mRetain,mPayback,mExcess,mErik,mJXJ,erikPct,paid,yr};
+    });
+    // find payoff month
+    const payoffM=months.findIndex(m=>m.paid&&(m===months[0]||!months[months.indexOf(m)-1].paid));
+    const actualPayoff=months.findIndex((m,i)=>m.paid&&(i===0||!months[i-1].paid));
+
+    const YR_COLORS=['#eff6ff','#f0fdf4','#fffbeb','#fdf4ff','#fff1f2'];
+    const YR_HD=['#dbeafe','#dcfce7','#fef9c3','#f3e8ff','#ffe4e6'];
+
+    // year header row (spans 12 cols each)
+    const yrHds=Array.from({length:5},(_,y)=>
+      `<th colspan="12" style="text-align:center;font-size:10px;font-weight:700;color:#334155;background:${YR_HD[y]};padding:3px 0;border-right:2px solid #e2e8f0">
+        Year ${y+1} · ${u.oy+y}
+      </th>`).join('');
+
+    // month header row
+    const mHds=Array.from({length:60},(_,m)=>{
+      const y=Math.floor(m/12);
+      const calMonth=((u.om-1+m)%12);
+      const lbl=['J','F','M','A','M','J','J','A','S','O','N','D'][calMonth];
+      const paid=months[m].paid;
+      return`<th style="min-width:38px;font-size:8px;color:${paid?GR:'#94a3b8'};background:${paid?'#f0fdf4':YR_COLORS[y]};padding:3px 2px;text-align:center;border-right:${(m+1)%12===0?'2px solid #e2e8f0':'none'}">${lbl}${Math.floor(m/12)+1}</th>`;
+    }).join('');
+
+    const makeRow=(label,vals,color,bold=false,sep=false,indent=false,labelSuffix='')=>{
+      const cells=vals.map((v,m)=>{
+        const y=Math.floor(m/12);
+        const paid=months[m].paid;
+        const bg=paid?'#f0fdf4':YR_COLORS[y];
+        return`<td style="text-align:right;font-size:9px;padding:2px 3px;color:${v<0?PK:v===0?'#cbd5e1':color};background:${bg};white-space:nowrap;border-right:${(m+1)%12===0?'2px solid #e2e8f0':'none'}">${km(v)}</td>`;
+      }).join('');
+      return`<tr style="${sep?'border-top:2px solid #e2e8f0':''}">
+        <td style="font-size:10px;font-weight:${bold?700:500};color:#334155;padding:${indent?'3px 10px 3px 22px':'4px 10px'};white-space:nowrap;position:sticky;left:0;background:#fff;z-index:1;border-right:2px solid #e2e8f0;min-width:140px">${indent?'↳ ':''}<span style="color:${color}">${label}</span>${labelSuffix}</td>
+        ${cells}
+      </tr>`;
+    };
+
+    const sn=String(ui+1).padStart(2,'0');
+    const payoffTxt=actualPayoff>=0
+      ?`Month ${actualPayoff+1} — ${MONTHS[((u.om-1+actualPayoff)%12)]}, ${u.oy+Math.floor(actualPayoff/12)}`
+      :'Beyond 60 months';
+
+    return`<div class="card" style="margin-bottom:20px;padding:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:700;color:#fff;background:#94a3b8;border-radius:4px;padding:3px 8px">STORE ${sn}</span>
+        <span style="font-weight:700;color:#334155;font-size:15px">${esc(u.name)}</span>
+        <span style="font-size:11px;color:#94a3b8">${u.rooms} rooms · Opens ${MONTHS[u.om-1].slice(0,3)} ${u.oy}</span>
+        <span style="margin-left:auto;font-size:11px;font-weight:600;color:#334155">Total CAPEX: <span style="color:${CY}">${$(u.capex+devFee)}</span></span>
+        <span style="font-size:11px;font-weight:600;color:#334155">CAPEX Repaid: <span style="color:${GR}">${payoffTxt}</span></span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="position:sticky;left:0;background:#fff;z-index:2;min-width:120px;border-right:2px solid #e2e8f0"></th>
+              ${yrHds}
+            </tr>
+            <tr>
+              <th style="position:sticky;left:0;background:#f8fafc;z-index:2;font-size:9px;color:#94a3b8;padding:3px 10px;border-right:2px solid #e2e8f0">Month →</th>
+              ${mHds}
+            </tr>
+          </thead>
+          <tbody>
+            ${makeRow('Revenue',         months.map(m=>m.mRev),   CY)}
+            ${makeRow('Expenses',        months.map(m=>-m.mExp),  '#64748b')}
+            ${makeRow('EBITDA',          months.map(m=>m.mEB),    '#334155',true,true)}
+            ${makeRow('Retention',       months.map(m=>-m.mRetain),AM)}
+            ${makeRow('CAPEX Payback',   months.map(m=>-m.mPayback),PK)}
+            ${makeRow('Excess Cash Flow',months.map(m=>m.mExcess), GR,true,true)}
+
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:20px;flex-wrap:wrap;font-size:11px;color:#94a3b8">
+        <span><span style="display:inline-block;width:10px;height:10px;background:${YR_COLORS[0]};border:1px solid #e2e8f0;margin-right:4px;border-radius:2px"></span>Pre-payoff months</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#f0fdf4;border:1px solid #bbf7d0;margin-right:4px;border-radius:2px"></span>Post-payoff (CAPEX repaid)</span>
+        <span style="margin-left:auto">Retention: <strong>${retRates.slice(0,5).map((r,i)=>`Y${i+1} ${r}%`).join(' · ')}</strong> &nbsp;·&nbsp; CAPEX Payback rate: <strong>${S.capexPaybackRate||90}%</strong> of post-retention EBITDA</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─── Render ─────────────────────────────────────────────────────────────────
+function render(){
+  const fid=document.activeElement?document.activeElement.id:null;
+  const P2=port();
+  const tRooms=S.units.reduce((s,u)=>s+u.rooms,0);
+  const TABS=[
+    {id:'setup',    label:'Setup'},
+    {id:'locations',label:'Locations'},
+    {id:'perf',     label:'Performance'},
+    {id:'units',    label:'Unit P&L'},
+    {id:'syspl',    label:'System P&L'},
+    {id:'portfolio',label:'Portfolio'},
+    {id:'forecast', label:'5-Year'},
+    {id:'cashflow', label:'Cash Flow'},
+    {id:'monthly',  label:'Monthly CF'},
+  ];
+  let body='';
+  if(S.tab==='locations') body=rLoc();
+  if(S.tab==='perf')      body=rPerf();
+  if(S.tab==='setup')     body=rSetup();
+  if(S.tab==='units')     body=rUnits();
+  if(S.tab==='syspl')     body=rSysPL();
+  if(S.tab==='portfolio') body=rPort();
+  if(S.tab==='forecast')  body=rFY();
+  if(S.tab==='cashflow')  body=rCashFlow();
+  if(S.tab==='monthly')   body=rMonthlyCF();
+
+  document.getElementById('app').innerHTML=`
+    <div style="background:#fff;border-bottom:1px solid #e2e8f0;padding:12px 24px;display:flex;align-items:center;gap:20px;box-shadow:0 1px 3px rgba(0,0,0,.04)">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#334155">Squarena Proforma — Erik Model v0320</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:1px">${S.units.length} locations · ${tRooms} rooms · CAPEX ${$(P2.tCX)}</div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:14px">
+        <span style="background:#d4fce8;color:#00904a;border-radius:20px;padding:5px 13px;font-size:11px;font-weight:700;letter-spacing:.3px">✓ Saved Locally</span>
+        ${LOGO}
+      </div>
+    </div>
+    <div class="tab-bar">${TABS.map(t=>`<button class="tab-btn ${S.tab===t.id?'active':''}" onclick="setTab('${t.id}')">${t.label}</button>`).join('')}</div>
+    <div class="content">${body}</div>`;
+
+  if(fid){const el=document.getElementById(fid);if(el)el.focus();}
+}
+
+// ─── Input Handler ──────────────────────────────────────────────────────────
+function inp(id,val){
+  const n=parseFloat(val);
+  const rm={'r-s':'sessions','r-p':'price','r-u':'util','r-a':'addon'};
+  if(rm[id]) {S.rev[rm[id]]=isNaN(n)?0:n;}
+  else if(id==='capex-pr'){S.capexPaybackRate=isNaN(n)?90:Math.max(0,Math.min(100,n));}
+  else{
+    const eqm=id.match(/^eq-(t|p)-(\d+)$/);
+    if(eqm){
+      if(!S.equityTiers)S.equityTiers=DEFEQTIERS.map(t=>({...t}));
+      const idx=parseInt(eqm[2]);
+      S.equityTiers[idx]={...S.equityTiers[idx],[eqm[1]]:isNaN(n)?0:n};
+    }
+    const dftm=id.match(/^dft-(t|f)-(\d+)$/);
+    if(dftm){
+      if(!S.devFeeTiers)S.devFeeTiers=DEFDFTIERS.map(t=>({...t}));
+      const idx=parseInt(dftm[2]);
+      S.devFeeTiers[idx]={...S.devFeeTiers[idx],[dftm[1]]:isNaN(n)?0:n};
+    }
+    const curveM=id.match(/^curve-(\d+)$/);
+    if(curveM){
+      const uid=parseInt(curveM[1]);
+      S.units=S.units.map(u=>u.id===uid?{...u,curve:val}:u);
+    }
+    const rampM=id.match(/^ramp-(\d+)$/);
+    if(rampM){
+      if(!S.ramp)S.ramp=[.50,.70,.88,1.00,1.00];
+      S.ramp[parseInt(rampM[1])]=isNaN(n)?0:Math.max(0,n)/100;
+    }
+    const cxm=id.match(/^cxm-(\d+)-(\d+)$/);
+    if(cxm){
+      if(!S.capexMatrix)S.capexMatrix=DEFCAPEX.map(r=>[...r]);
+      const ri=parseInt(cxm[1]),ci=parseInt(cxm[2]);
+      S.capexMatrix[ri][ci]=isNaN(n)?0:n;
+      const rooms=ci+2;
+      S.units=S.units.map(u=>u.rooms===rooms?{...u,capex:capexForRooms(rooms)}:u);
+    }
+    const oxm=id.match(/^oxm-(\d+)-(\d+)$/);
+    if(oxm){
+      if(!S.opexMatrix)S.opexMatrix=DEFOPEX.map(r=>[...r]);
+      const ri=parseInt(oxm[1]),ci=parseInt(oxm[2]);
+      S.opexMatrix[ri][ci]=isNaN(n)?0:n;
+      const rooms=ci+2;
+      S.units=S.units.map(u=>u.rooms===rooms?{...u,...opexForRooms(rooms)}:u);
+    }
+    // comp fields: comp-df-{i}, comp-rs-{i}, comp-eq-{i}
+    const cm2=id.match(/^comp-(df|rs|eq)-(\d+)$/);
+    if(cm2){
+      const fmap={df:'devFee',rs:'revShare',eq:'equity'};
+      const idx=parseInt(cm2[2]);
+      if(!S.comp)S.comp=DEFCOMP.map(c=>({...c}));
+      S.comp[idx]={...S.comp[idx],[fmap[cm2[1]]]:isNaN(n)?0:n};
+    }
+    // distributions: dist-{i}
+    const dm=id.match(/^dist-(\d+)$/);
+    if(dm){
+      if(!S.distributions)S.distributions=[0,0,0,0,0];
+      S.distributions[parseInt(dm[1])]=isNaN(n)?0:n;
+    }
+    const retm=id.match(/^ret-(\d+)$/);
+    if(retm){
+      if(!S.retentionRates)S.retentionRates=[10,10,10,10,10];
+      S.retentionRates[parseInt(retm[1])]=isNaN(n)?0:Math.max(0,Math.min(100,n));
+    }
+    const m=id.match(/^u([a-z]+)-(\d+)$/);
+    if(m){
+      const uid=parseInt(m[2]),f=m[1];
+      S.units=S.units.map(u=>{
+        if(u.id!==uid)return u;
+        const map={n:'name',om:'om',oy:'oy',r:'rooms',rt:'rent',
+                   co:'mCogs',la:'mLabor',mk:'mMktg',mi:'mMisc',df:'devFee',rs:'revShare'};
+        if(!map[f])return u;
+        const key=map[f];
+        if(key==='name')return{...u,[key]:String(val)};
+        if(key==='rooms'){
+          const newRooms=Math.max(1,Math.min(6,parseInt(val)||1));
+          return{...u,rooms:newRooms,capex:capexForRooms(newRooms),...opexForRooms(newRooms)};
+        }
+        return{...u,[key]:isNaN(n)?0:n};
+      });
+    }
+  }
+  render();ghSave();
+}
+
+function setTab(t){S.tab=t;render();}
+function setSel(id){S.sel=id;render();}
+function addUnit(){
+  const id=nid++;
+  const defOpex=opexForRooms(2);
+  S.units.push({id,name:`Location ${id}`,om:1,oy:2027,rooms:2,capex:capexForRooms(2),...defOpex,devFee:35000,revShare:10});
+  render();ghSave();
+}
+function delUnit(id){
+  S.units=S.units.filter(u=>u.id!==id);
+  if(S.sel===id&&S.units.length)S.sel=S.units[0].id;
+  render();ghSave();
+}
+
+// On startup: load from JSONbin, fall back to localStorage
+render();
+ghLoad();
+</script>
+</body>
+</html>
