@@ -1069,15 +1069,14 @@ async function autoScoreRE(propId){
     const lon=parseFloat(nom.lon);
     const displayAddr=nom.display_name;
 
-    // ── Step 2: Census Tract via coordinates (CORS-friendly) ─────────────────
-    const tractUrl=`https://geocoding.geo.census.gov/geocoder/geographies/coordinates?x=${lon}&y=${lat}&benchmark=Public_AR_Current&vintage=Current_Current&format=json`;
-    const tractRes=await fetch(tractUrl);
-    const tractJson=await tractRes.json();
-    const tractData=tractJson?.result?.geographies?.['Census Tracts']?.[0];
-    if(!tractData)throw new Error('Could not resolve census tract. Try a full street address.');
-    const stFips=tractData.STATE;
-    const coFips=tractData.COUNTY;
-    const trFips=tractData.TRACT;
+    // ── Step 2: Census Tract via FCC Area API (CORS-friendly) ───────────────
+    const fccUrl=`https://geo.fcc.gov/api/census/block/find?latitude=${lat}&longitude=${lon}&format=json`;
+    const fccRes=await fetch(fccUrl);
+    const fccJson=await fccRes.json();
+    if(!fccJson?.County?.FIPS)throw new Error('Could not resolve census tract from coordinates.');
+    const stFips=fccJson.State.FIPS;
+    const coFips=fccJson.County.FIPS.slice(2,5);
+    const trFips=fccJson.Block.FIPS.slice(5,11);
 
     // ── Step 3: Census ACS5 — demographics + psychographics ──────────────────
     // B19013_001E = median HH income
