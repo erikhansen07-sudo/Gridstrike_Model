@@ -121,6 +121,20 @@ const DEFCOMP=Array.from({length:20},()=>({devFee:35000,revShare:10,equity:0}));
 const DEFEQTIERS=[{t:1,p:3},{t:10,p:6},{t:20,p:10}];
 // devFeeTiers: stores 1–t get this fee; t is the upper bound (last tier = ∞)
 const DEFDFTIERS=[{t:3,f:40000},{t:6,f:35000},{t:10,f:30000},{t:999,f:25000}];
+const DEF_RE_CAPEX={
+  gcPsf:45,           // GC work per sqft
+  techPerRoom:10000,  // technology/AV per room
+  tilesPerRoom:25000, // Gridstrike tiles per room
+  brandPerRoom:4500,  // brand finishes per room
+  furniturePerRoom:2500, // waiting area furniture per room
+  lobbyFurniture:12000,  // fixed lobby furniture
+  bathCost:5000,      // per bathroom
+  archEng:15000,      // arch & engineering (fixed)
+  permitting:4000,    // permitting fees (fixed)
+  signage:6000,       // exterior signage (fixed)
+  inventory:9000,     // opening inventory (fixed)
+  marketing:6000,     // grand opening marketing (fixed)
+};
 const DEF_SCORING={
   // ── Dimension weights (should sum to 100) ───────────────────────────────
   wRent:15, wSize:10, wDemo:15, wYoung:10, wFamily:15,
@@ -161,6 +175,7 @@ const DEFAULTS={
   retentionRates:[10,10,10,10,10],
   capexPaybackRate:90,
   scoring:{...DEF_SCORING},
+  reCapex:{...DEF_RE_CAPEX},
   equityTiers:DEFEQTIERS.map(t=>({...t})),
   devFeeTiers:DEFDFTIERS.map(t=>({...t})),
   reProps:[
@@ -169,7 +184,7 @@ const DEFAULTS={
   ],
   units:[
     {id:1,name:'Location 1',    om:1,oy:2026,rooms:2,capex:150000,capexItems:DEFCAPEX.map(r=>r[0]),rent:8438,mCogs:2500,mLabor:9250,mMktg:1500,mMisc:1500},
-    
+
   ]
 };
 function migrateState(s){
@@ -183,6 +198,7 @@ function migrateState(s){
   if(!s.opexMatrix)s.opexMatrix=DEFOPEX.map(r=>[...r]);
   if(!s.retentionRates)s.retentionRates=[10,10,10,10,10];
   if(!s.scoring)s.scoring={...DEF_SCORING};
+  if(!s.reCapex)s.reCapex={...DEF_RE_CAPEX};
   if(!s.capexPaybackRate)s.capexPaybackRate=90;
   if(!s.equityTiers)s.equityTiers=DEFEQTIERS.map(t=>({...t}));
   if(!s.devFeeTiers)s.devFeeTiers=DEFDFTIERS.map(t=>({...t}));
@@ -676,6 +692,34 @@ function rSetup(){
           Add <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px">https://erikhansen07-sudo.github.io/*</code> as an allowed HTTP referrer.
         </div>
       </div>
+    </div>
+    <div class="card">
+      <div class="card-title">General CAPEX Assumptions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(used by the CAPEX calculator on each Real Estate location)</span></div>
+      <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0;margin-bottom:8px">Per Square Foot</div>
+      <div class="g4" style="margin-bottom:12px">
+        ${ni('rc-gcPsf','GC Work ($/sqft)',S.reCapex?.gcPsf??DEF_RE_CAPEX.gcPsf,{pre:'$',step:1,min:0})}
+      </div>
+      <div class="sdiv" style="margin-bottom:8px">Per Room</div>
+      <div class="g4" style="margin-bottom:12px">
+        ${ni('rc-techPerRoom','Room Technology',S.reCapex?.techPerRoom??DEF_RE_CAPEX.techPerRoom,{pre:'$',step:500,min:0})}
+        ${ni('rc-tilesPerRoom','Gridstrike Tiles',S.reCapex?.tilesPerRoom??DEF_RE_CAPEX.tilesPerRoom,{pre:'$',step:1000,min:0})}
+        ${ni('rc-brandPerRoom','Brand Finishes',S.reCapex?.brandPerRoom??DEF_RE_CAPEX.brandPerRoom,{pre:'$',step:500,min:0})}
+        ${ni('rc-furniturePerRoom','Room Furniture',S.reCapex?.furniturePerRoom??DEF_RE_CAPEX.furniturePerRoom,{pre:'$',step:500,min:0})}
+      </div>
+      <div class="sdiv" style="margin-bottom:8px">Per Bathroom</div>
+      <div class="g4" style="margin-bottom:12px">
+        ${ni('rc-bathCost','Cost per Bathroom',S.reCapex?.bathCost??DEF_RE_CAPEX.bathCost,{pre:'$',step:500,min:0})}
+      </div>
+      <div class="sdiv" style="margin-bottom:8px">Fixed Costs</div>
+      <div class="g4" style="margin-bottom:12px">
+        ${ni('rc-lobbyFurniture','Lobby Furniture',S.reCapex?.lobbyFurniture??DEF_RE_CAPEX.lobbyFurniture,{pre:'$',step:1000,min:0})}
+        ${ni('rc-archEng','Arch & Engineering',S.reCapex?.archEng??DEF_RE_CAPEX.archEng,{pre:'$',step:1000,min:0})}
+        ${ni('rc-permitting','Permitting Fees',S.reCapex?.permitting??DEF_RE_CAPEX.permitting,{pre:'$',step:500,min:0})}
+        ${ni('rc-signage','Exterior Signage',S.reCapex?.signage??DEF_RE_CAPEX.signage,{pre:'$',step:500,min:0})}
+        ${ni('rc-inventory','Opening Inventory',S.reCapex?.inventory??DEF_RE_CAPEX.inventory,{pre:'$',step:500,min:0})}
+        ${ni('rc-marketing','Grand Opening Mktg',S.reCapex?.marketing??DEF_RE_CAPEX.marketing,{pre:'$',step:500,min:0})}
+      </div>
+      <button onclick="inp('rc-reset','')" style="border:none;background:#f1f5f9;color:#64748b;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">↺ Reset to defaults</button>
     </div>
     ${rScoringConfig()}`;
 }
@@ -1199,6 +1243,7 @@ function rMonthlyCF(){
 
 const reScoreStatus={};   // propId → 'idle'|'loading'|'done'|'error'
 const rePoiExpanded={};  // 'propId-cat' → bool
+let rePropTab={};         // propId → 'details'|'scoring'|'capex'
 
 async function autoScoreRE(propId){
   const p=(S.reProps||[]).find(x=>x.id===propId);
@@ -1663,197 +1708,208 @@ function rRE(){
       </div>
 
       ${collapsed?'':`
-      <!-- GENERAL DEMOGRAPHICS -->
-      ${autoData?`
-      <div class="sdiv" style="margin-top:14px">General Demographics</div>
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-          <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Trade Area Demographics</span>
-          <span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Census Tracts</span>
-        </div>
-        ${(()=>{
-          const ta=autoData.tradeArea||{};
-          const r3=ta.mi3,r4=ta.mi4,r5=ta.mi5;
-          const fmt=(v,type)=>{
-            if(v==null||v===0)return'—';
-            if(type==='$')return'$'+Math.round(v/1000)+'k';
-            if(type==='%')return v+'%';
-            if(type==='pop')return v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?Math.round(v/1000)+'k':v;
-            return v;
-          };
-          const rows=[
-            ['💰','Median Income','$','medIncome'],
-            ['👤','Median Age','','medAge'],
-            ['👥','Population','pop','population'],
-            ['🎓',"Bachelor's+",'%','pctBachelors'],
-            ['🧑','Ages 18–34','%','pctYoungAdult'],
-            ['👶','Under 18','%','pctUnder18'],
-          ];
-          const th='<th style="text-align:center;font-size:10px;font-weight:700;color:#475569;padding:4px 6px;border-bottom:2px solid #e2e8f0">';
-          const td=(v,hi)=>`<td style="text-align:center;font-size:12px;font-weight:${hi?'700':'500'};color:${hi?'#0284c7':'#334155'};padding:3px 6px;border-bottom:1px solid #f1f5f9">${v}</td>`;
-          return`<table style="width:100%;border-collapse:collapse">
-            <thead><tr>
-              <th style="text-align:left;font-size:10px;font-weight:700;color:#475569;padding:4px 6px;border-bottom:2px solid #e2e8f0">Metric</th>
-              ${th}3 mi</th>${th}4 mi</th>${th}5 mi</th>
-            </tr></thead>
-            <tbody>
-              ${rows.map(([ic,lb,type,key])=>`<tr>
-                <td style="font-size:11px;color:#64748b;padding:3px 4px;border-bottom:1px solid #f1f5f9">${ic} ${lb}</td>
-                ${td(fmt(r3?.[key],type),true)}
-                ${td(fmt(r4?.[key],type),false)}
-                ${td(fmt(r5?.[key],type),false)}
-              </tr>`).join('')}
-              <tr style="background:#f0f9ff">
-                <td style="font-size:10px;color:#94a3b8;padding:3px 4px;font-style:italic">Census tracts</td>
-                ${td(r3?.tractCount??'—',false)}
-                ${td(r4?.tractCount??'—',false)}
-                ${td(r5?.tractCount??'—',false)}
-              </tr>
-            </tbody>
-          </table>`;
-        })()}
-      </div>`:''}
+      <!-- TAB BAR -->
+      <div style="display:flex;gap:0;border-bottom:2px solid #e2e8f0;margin:12px 0 0">
+        ${['details','scoring','capex'].map(t=>{
+          const lbl={details:'📋 Location Details',scoring:'🎯 Scoring',capex:'🏗 CAPEX'}[t];
+          const active=(rePropTab[p.id]||'details')===t;
+          return\`<button onclick="reSetTab(\${p.id},'${t}')"
+            style="border:none;background:none;padding:8px 16px;font-size:12px;font-weight:\${active?700:500};
+            color:\${active?'#00904a':'#64748b'};border-bottom:\${active?'2px solid #00904a':'2px solid transparent'};
+            margin-bottom:-2px;cursor:pointer;transition:color .15s">\${lbl}</button>\`;
+        }).join('')}
+      </div>
 
-      <!-- MAIN GRID -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:${autoData?'4px':'16px'}">
-
-        <!-- LEFT: Property Details + Space Table + Link + Rent Summary -->
-        <div>
+      <!-- TAB CONTENT: DETAILS -->
+      \${(rePropTab[p.id]||'details')==='details'?\`<div style="margin-top:12px">
           <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0">Property Details</div>
           <div class="g3" style="margin-bottom:10px">
-            ${ni2(`re-sqft-${p.id}`,'Sq Footage',p.sqft,{step:50,min:500})}
-            ${ni2(`re-br-${p.id}`,'Base Rent ($/sqft)',p.baseRent,{pre:'$',step:0.25,min:0})}
-            ${ni2(`re-cams-${p.id}`,'CAMS/NNN ($/sqft)',p.cams||0,{pre:'$',step:0.25,min:0})}
+            \${ni2(\`re-sqft-\${p.id}\`,'Sq Footage',p.sqft,{step:50,min:500})}
+            \${ni2(\`re-br-\${p.id}\`,'Base Rent (\$/sqft)',p.baseRent,{pre:'$',step:0.25,min:0})}
+            \${ni2(\`re-cams-\${p.id}\`,'CAMS/NNN (\$/sqft)',p.cams||0,{pre:'$',step:0.25,min:0})}
           </div>
           <div class="g2" style="margin-bottom:10px">
             <div>
               <label class="label">Zoning Type</label>
-              <select id="re-zone-${p.id}" onchange="reInp('re-zone-${p.id}',this.value)">
-                ${['Industrial Flex','Retail Strip','Mixed Use','Standalone','Mall/Center','Other'].map(z=>`<option value="${z}"${p.zoning===z?' selected':''}>${z}</option>`).join('')}
+              <select id="re-zone-\${p.id}" onchange="reInp('re-zone-\${p.id}',this.value)">
+                \${['Industrial Flex','Retail Strip','Mixed Use','Standalone','Mall/Center','Other'].map(z=>\`<option value="\${z}"\${p.zoning===z?' selected':''}>​\${z}</option>\`).join('')}
               </select>
             </div>
-            ${ni2(`re-term-${p.id}`,'Lease Term (yrs)',p.leaseTerm||5,{step:1,min:1})}
+            \${ni2(\`re-term-\${p.id}\`,'Lease Term (yrs)',p.leaseTerm||5,{step:1,min:1})}
           </div>
-
-          <!-- Space Allocation Table -->
           <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Space Allocation</span>
               <div style="display:flex;gap:4px;align-items:center">
                 <span style="font-size:10px;color:#64748b">Baths:</span>
-                <button onclick="reInp('re-baths-${p.id}',1)" style="${btnStyle(1)}">1</button>
-                <button onclick="reInp('re-baths-${p.id}',2)" style="${btnStyle(2)}">2</button>
+                <button onclick="reInp('re-baths-\${p.id}',1)" style="\${btnStyle(1)}">1</button>
+                <button onclick="reInp('re-baths-\${p.id}',2)" style="\${btnStyle(2)}">2</button>
               </div>
             </div>
-            ${[['Total Space','',p.sqft?.toLocaleString()||0,false],['Entertainment / Lobby','25%',sp.entertain.toLocaleString(),true],['Ingress / Egress','15%',sp.ingress.toLocaleString(),true],['Support / Back-of-house','10%',sp.support.toLocaleString(),true],[`Bathrooms (${baths}×100sqft)`,'',sp.bathSqft.toLocaleString(),true]].map(([lb,pc,vl,ind])=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #e2e8f0;color:${ind?'#94a3b8':'#334155'}"><span style="padding-left:${ind?'8px':'0'}">${ind?'− ':' '}${lb}${pc?` <span style="color:#cbd5e1">(${pc})</span>`:''}  </span><span style="font-weight:600">${vl} sqft</span></div>`).join('')}
+            \${[['Total Space','',p.sqft?.toLocaleString()||0,false],['Entertainment / Lobby','25%',sp.entertain.toLocaleString(),true],['Ingress / Egress','15%',sp.ingress.toLocaleString(),true],['Support / Back-of-house','10%',sp.support.toLocaleString(),true],[\`Bathrooms (\${baths}×100sqft)\`,'',sp.bathSqft.toLocaleString(),true]].map(([lb,pc,vl,ind])=>\`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #e2e8f0;color:\${ind?'#94a3b8':'#334155'}"><span style="padding-left:\${ind?'8px':'0'}">\${ind?'− ':' '}\${lb}\${pc?\` <span style="color:#cbd5e1">(\${pc})</span>\`:''}  </span><span style="font-weight:600">\${vl} sqft</span></div>\`).join('')}
             <div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:2px solid #00904a;font-weight:700;margin-top:2px">
-              <span style="color:#334155">Available for Rooms</span><span style="color:#00904a">${sp.available.toLocaleString()} sqft</span>
+              <span style="color:#334155">Available for Rooms</span><span style="color:#00904a">\${sp.available.toLocaleString()} sqft</span>
             </div>
             <div style="font-size:10px;color:#94a3b8;padding:3px 0">÷ 400 sqft / room (25′ × 16′)</div>
             <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">
               <span style="font-size:12px;font-weight:700;color:#334155">Projected Rooms</span>
-              <span style="font-size:22px;font-weight:900;color:#00904a">${sp.rooms}</span>
+              <span style="font-size:22px;font-weight:900;color:#00904a">\${sp.rooms}</span>
             </div>
-            ${sp.leftover>0?`<div style="font-size:10px;color:#94a3b8;text-align:right">Buffer: ${sp.leftover} sqft</div>`:''}
+            \${sp.leftover>0?\`<div style="font-size:10px;color:#94a3b8;text-align:right">Buffer: \${sp.leftover} sqft</div>\`:''}
           </div>
-
-          <!-- Link to Location -->
           <div class="lsec">
             <div class="lsec-title">Link to Location</div>
-            <select id="re-link-${p.id}" onchange="reInp('re-link-${p.id}',this.value)" style="width:100%;margin-bottom:8px">
+            <select id="re-link-\${p.id}" onchange="reInp('re-link-\${p.id}',this.value)" style="width:100%;margin-bottom:8px">
               <option value="">— Not linked —</option>
-              ${S.units.map(u=>`<option value="${u.id}"${p.linkedUnitId===u.id?' selected':''}>${esc(u.name)}</option>`).join('')}
+              \${S.units.map(u=>\`<option value="\${u.id}"\${p.linkedUnitId===u.id?' selected':''}>\${esc(u.name)}</option>\`).join('')}
             </select>
-            ${linked?`<div style="font-size:11px;color:#334155;margin-top:4px">
-              <span style="color:#64748b">Model rent:</span> <strong style="color:#00904a">${$(linked.rent)}/mo</strong>
+            \${linked?\`<div style="font-size:11px;color:#334155;margin-top:4px">
+              <span style="color:#64748b">Model rent:</span> <strong style="color:#00904a">\${$(linked.rent)}/mo</strong>
               <span style="color:#94a3b8;margin:0 5px">→</span>
               <span style="color:#64748b">This property:</span>
-              <strong style="color:${monthly>linked.rent*1.1?'#dc2626':monthly<linked.rent*0.9?'#00904a':'#334155'}">${$(monthly)}/mo</strong>
-              <button class="btn-sm" style="margin-left:6px" onclick="reSyncRent(${p.id})">Sync Rent →</button>
-            </div>`:`<div style="font-size:11px;color:#94a3b8">Link a location to sync rent into the model.</div>`}
+              <strong style="color:\${monthly>linked.rent*1.1?'#dc2626':monthly<linked.rent*0.9?'#00904a':'#334155'}">\${$(monthly)}/mo</strong>
+              <button class="btn-sm" style="margin-left:6px" onclick="reSyncRent(\${p.id})">Sync Rent →</button>
+            </div>\`:\`<div style="font-size:11px;color:#94a3b8">Link a location to sync rent into the model.</div>\`}
           </div>
-
-          <!-- Rent + Revenue Summary -->
           <div style="margin-top:10px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
-            ${[['Total $/sqft/mo','#334155',((p.baseRent||0)+(p.cams||0)).toFixed(2)],['Monthly Rent','#334155',$(monthly)],[`Est. Revenue (${sc.projRooms} rooms)`,'#334155',$(Math.round(sc.monthlyRevenue))],['10% Rent Ceiling','#64748b',$(Math.round(sc.monthlyRevenue*0.10))+'/mo · $'+sc.rentCeilPsf.toFixed(2)+'/sqft']].map(([lb,cl,vl])=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:#64748b">${lb}</span><strong style="color:${cl}">${vl}</strong></div>`).join('')}
+            \${[['Total $/sqft/mo','#334155',((p.baseRent||0)+(p.cams||0)).toFixed(2)],['Monthly Rent','#334155',$(monthly)],[\`Est. Revenue (\${sc.projRooms} rooms)\`,'#334155',$(Math.round(sc.monthlyRevenue))],['10% Rent Ceiling','#64748b',$(Math.round(sc.monthlyRevenue*0.10))+'/mo · $'+sc.rentCeilPsf.toFixed(2)+'/sqft']].map(([lb,cl,vl])=>\`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:#64748b">\${lb}</span><strong style="color:\${cl}">\${vl}</strong></div>\`).join('')}
             <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;border-top:1px solid #e2e8f0;padding-top:6px;margin-top:4px">
               <span style="color:#334155">Rent-to-Revenue</span>
-              <strong style="color:${sc.rentToPct>0.20?'#dc2626':sc.rentToPct>0.12?'#d97706':'#00904a'}">${Math.round(sc.rentToPct*100)}%${sc.rentToPct>0.20?' ⚠':''}</strong>
+              <strong style="color:\${sc.rentToPct>0.20?'#dc2626':sc.rentToPct>0.12?'#d97706':'#00904a'}">\${Math.round(sc.rentToPct*100)}%\${sc.rentToPct>0.20?' ⚠':''}</strong>
             </div>
           </div>
-        </div>
+        </div>\`:''}
 
-        <!-- RIGHT: Score Analysis + POIs -->
-        <div>
-          <!-- Score Analysis -->
-          <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0">Score Analysis
-            <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:#94a3b8"> — drag sliders to override</span>
+      <!-- TAB CONTENT: SCORING -->
+      \${(rePropTab[p.id]||'details')==='scoring'?\`<div style="margin-top:12px">
+        \${autoData?\`
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+            <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Trade Area Demographics</span>
+            <span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Census Tracts</span>
           </div>
-          ${dims.map(dimRow).join('')}
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;margin-top:4px;border-top:2px solid #e2e8f0">
-            <span style="font-size:12px;font-weight:700;color:#334155">TOTAL</span>
-            <span style="font-size:20px;font-weight:900;color:${scoreColor}">${sc.total} / 100 · ${gr.g}</span>
-          </div>
-          <div style="height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;margin-bottom:16px">
-            <div style="height:100%;width:${sc.total}%;background:${scoreColor};border-radius:4px;transition:width 0.3s"></div>
-          </div>
-
-          <!-- Nearby POIs -->
-          ${autoData?`<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-              <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Nearby POIs</span>
-              ${autoData.poiSource==='google'
-                ?`<span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Google Places</span>`
-                :autoData.poiSource==='osm'
-                ?`<span style="font-size:9px;background:#fef3c7;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:700">OpenStreetMap</span>`
-                :`<span style="font-size:9px;background:#f1f5f9;color:#94a3b8;border-radius:3px;padding:1px 5px;font-weight:700">No data</span>`}
-            </div>
-            ${(()=>{
-              const pl=autoData.poiLists||{};
-              const cap=20;
-              const poiRow=(ic,cat,lb,names)=>{
-                const n=names.length;
-                const exp=rePoiExpanded[p.id+'-'+cat]&&n>0;
-                return`<div style="border-bottom:1px solid #f1f5f9">
-                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0;cursor:${n?'pointer':'default'}"
-                    ${n?`onclick="reTogglePoi(${p.id},'${cat}')"`:''}>
-                    <span style="color:#64748b">${ic} ${lb}${n?`<span style="font-size:9px;color:#94a3b8;margin-left:4px">${exp?'▲':'▼'}</span>`:''}</span>
-                    <strong style="color:#334155">${n>0&&n>=cap?'20+':n}</strong>
-                  </div>
-                  ${exp?`<div style="padding:4px 0 6px 16px">${names.map(nm=>`<div style="font-size:11px;color:#475569;padding:1px 0;border-bottom:1px solid #f8fafc">${nm}</div>`).join('')}</div>`:''}
-                </div>`;
-              };
-              const grpHdr=lbl=>`<div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;padding:6px 0 2px;margin-top:2px">${lbl}</div>`;
-              return[
-                grpHdr('Anchors'),
-                poiRow('🏨','hotels','Hotels (2mi)',pl.hotels||[]),
-                poiRow('🏢','employers','Major Employers (2mi)',pl.employers||[]),
-                grpHdr('Restaurants & Bars (1mi)'),
-                poiRow('🍽','restFamily','Family / Sit-Down',pl.restFamily||[]),
-                poiRow('🍔','restFastFood','Fast Food / QSR',pl.restFastFood||[]),
-                poiRow('☕','restCoffee','Coffee Shops',pl.restCoffee||[]),
-                poiRow('🍺','restBar','Bars & Nightlife',pl.restBar||[]),
-                grpHdr('Shopping (800m)'),
-                poiRow('🛍','shopRetail','Retail Shopping',pl.shopRetail||[]),
-                poiRow('🛒','grocery','Grocery Stores (2mi)',pl.grocery||[]),
-                grpHdr('Schools (5mi)'),
-                poiRow('🏫','schoolElem','Elementary',pl.schoolElem||[]),
-                poiRow('📚','schoolMiddle','Middle School',pl.schoolMiddle||[]),
-                poiRow('🎓','schoolHigh','High School',pl.schoolHigh||[]),
-                poiRow('🏛','schoolCollege','College / University',pl.schoolCollege||[]),
-                grpHdr('Fitness & Wellness (1mi)'),
-                poiRow('💪','gymFitness','Gyms & Fitness',pl.gymFitness||[]),
-                poiRow('🧘','gymYoga','Yoga & Pilates',pl.gymYoga||[]),
-                poiRow('🏋','gymCrossfit','CrossFit',pl.gymCrossfit||[]),
-                poiRow('💃','gymDance','Dance & Martial Arts',pl.gymDance||[]),
-                poiRow('💅','wellness','Personal Wellness',pl.wellness||[]),
-                grpHdr('Competition (3mi)'),
-                poiRow('🎮','competitors','Entertainment Competitors',pl.competitors||[]),
-              ].join('');
-            })()}
-          </div>`:''}
+          \${(()=>{
+            const ta=autoData.tradeArea||{};
+            const r3=ta.mi3,r4=ta.mi4,r5=ta.mi5;
+            const fmt=(v,type)=>{
+              if(v==null||v===0)return'—';
+              if(type==='$')return'$'+Math.round(v/1000)+'k';
+              if(type==='%')return v+'%';
+              if(type==='pop')return v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?Math.round(v/1000)+'k':v;
+              return v;
+            };
+            const rows=[
+              ['💰','Median Income','$','medIncome'],
+              ['👤','Median Age','','medAge'],
+              ['👥','Population','pop','population'],
+              ['🎓',"Bachelor's+",'%','pctBachelors'],
+              ['🧑','Ages 18–34','%','pctYoungAdult'],
+              ['👶','Under 18','%','pctUnder18'],
+            ];
+            const th='<th style="text-align:center;font-size:10px;font-weight:700;color:#475569;padding:4px 6px;border-bottom:2px solid #e2e8f0">';
+            const td=(v,hi)=>\`<td style="text-align:center;font-size:12px;font-weight:\${hi?'700':'500'};color:\${hi?'#0284c7':'#334155'};padding:3px 6px;border-bottom:1px solid #f1f5f9">\${v}</td>\`;
+            return\`<table style="width:100%;border-collapse:collapse">
+              <thead><tr>
+                <th style="text-align:left;font-size:10px;font-weight:700;color:#475569;padding:4px 6px;border-bottom:2px solid #e2e8f0">Metric</th>
+                \${th}3 mi</th>\${th}4 mi</th>\${th}5 mi</th>
+              </tr></thead>
+              <tbody>
+                \${rows.map(([ic,lb,type,key])=>\`<tr>
+                  <td style="font-size:11px;color:#64748b;padding:3px 4px;border-bottom:1px solid #f1f5f9">\${ic} \${lb}</td>
+                  \${td(fmt(r3?.[key],type),true)}
+                  \${td(fmt(r4?.[key],type),false)}
+                  \${td(fmt(r5?.[key],type),false)}
+                </tr>\`).join('')}
+                <tr style="background:#f0f9ff">
+                  <td style="font-size:10px;color:#94a3b8;padding:3px 4px;font-style:italic">Census tracts</td>
+                  \${td(r3?.tractCount??'—',false)}
+                  \${td(r4?.tractCount??'—',false)}
+                  \${td(r5?.tractCount??'—',false)}
+                </tr>
+              </tbody>
+            </table>\`;
+          })()}
+        </div>\`:''}
+        <div class="sdiv">Score Analysis <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:#94a3b8"> — drag sliders to override</span></div>
+        \${dims.map(dimRow).join('')}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;margin-top:4px;border-top:2px solid #e2e8f0">
+          <span style="font-size:12px;font-weight:700;color:#334155">TOTAL</span>
+          <span style="font-size:20px;font-weight:900;color:\${scoreColor}">\${sc.total} / 100 · \${gr.g}</span>
         </div>
-      </div>
+        <div style="height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;margin-bottom:16px">
+          <div style="height:100%;width:\${sc.total}%;background:\${scoreColor};border-radius:4px;transition:width 0.3s"></div>
+        </div>
+        \${autoData?\`<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+            <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Nearby POIs</span>
+            \${autoData.poiSource==='google'?\`<span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Google Places</span>\`:autoData.poiSource==='osm'?\`<span style="font-size:9px;background:#fef3c7;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:700">OpenStreetMap</span>\`:\`<span style="font-size:9px;background:#f1f5f9;color:#94a3b8;border-radius:3px;padding:1px 5px;font-weight:700">No data</span>\`}
+          </div>
+          \${(()=>{
+            const pl=autoData.poiLists||{};
+            const cap=20;
+            const poiRow=(ic,cat,lb,names)=>{
+              const n=names.length;
+              const exp=rePoiExpanded[p.id+'-'+cat]&&n>0;
+              return\`<div style="border-bottom:1px solid #f1f5f9">
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0;cursor:\${n?'pointer':'default'}"
+                  \${n?\`onclick="reTogglePoi(\${p.id},'\${cat}')\"\`:''}}>
+                  <span style="color:#64748b">\${ic} \${lb}\${n?\`<span style="font-size:9px;color:#94a3b8;margin-left:4px">\${exp?'▲':'▼'}</span>\`:''}</span>
+                  <strong style="color:#334155">\${n>0&&n>=cap?'20+':n}</strong>
+                </div>
+                \${exp?\`<div style="padding:4px 0 6px 16px">\${names.map(nm=>\`<div style="font-size:11px;color:#475569;padding:1px 0;border-bottom:1px solid #f8fafc">\${nm}</div>\`).join('')}</div>\`:''}
+              </div>\`;
+            };
+            const grpHdr=lbl=>\`<div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;padding:6px 0 2px;margin-top:2px">\${lbl}</div>\`;
+            return['Anchors',['🏨','hotels','Hotels (2mi)',pl.hotels||[]],['🏢','employers','Major Employers (2mi)',pl.employers||[]],grpHdr('Restaurants & Bars (1mi)'),['🍽','restFamily','Family / Sit-Down',pl.restFamily||[]],['🍔','restFastFood','Fast Food / QSR',pl.restFastFood||[]],['☕','restCoffee','Coffee Shops',pl.restCoffee||[]],['🍺','restBar','Bars & Nightlife',pl.restBar||[]],grpHdr('Shopping (800m)'),['🛍','shopRetail','Retail Shopping',pl.shopRetail||[]],['🛒','grocery','Grocery Stores (2mi)',pl.grocery||[]],grpHdr('Schools (5mi)'),['🏫','schoolElem','Elementary',pl.schoolElem||[]],['📚','schoolMiddle','Middle School',pl.schoolMiddle||[]],['🎓','schoolHigh','High School',pl.schoolHigh||[]],['🏛','schoolCollege','College / University',pl.schoolCollege||[]],grpHdr('Fitness & Wellness (1mi)'),['💪','gymFitness','Gyms & Fitness',pl.gymFitness||[]],['🧘','gymYoga','Yoga & Pilates',pl.gymYoga||[]],['🏋','gymCrossfit','CrossFit',pl.gymCrossfit||[]],['💃','gymDance','Dance & Martial Arts',pl.gymDance||[]],['💅','wellness','Personal Wellness',pl.wellness||[]],grpHdr('Competition (3mi)'),['🎮','competitors','Entertainment Competitors',pl.competitors||[]]].map((item,idx)=>typeof item==='string'?grpHdr(item):poiRow(...item)).join('');
+          })()}
+        </div>\`:''}
+      </div>\`:''}
+
+      <!-- TAB CONTENT: CAPEX -->
+      \${(rePropTab[p.id]||'details')==='capex'?(()=>{
+        const rc=Object.assign({},DEF_RE_CAPEX,S.reCapex||{});
+        const items=[
+          {label:'GC Work',amt:Math.round(p.sqft*rc.gcPsf),basis:\`\${p.sqft?.toLocaleString()||0} sqft × \$\${rc.gcPsf}/sqft\`},
+          {label:'Room Technology',amt:Math.round(sp.rooms*rc.techPerRoom),basis:\`\${sp.rooms} rooms × \$\${rc.techPerRoom.toLocaleString()}\`},
+          {label:'Gridstrike Tiles',amt:Math.round(sp.rooms*rc.tilesPerRoom),basis:\`\${sp.rooms} rooms × \$\${rc.tilesPerRoom.toLocaleString()}\`},
+          {label:'Brand Finishes',amt:Math.round(sp.rooms*rc.brandPerRoom),basis:\`\${sp.rooms} rooms × \$\${rc.brandPerRoom.toLocaleString()}\`},
+          {label:'Room Furniture',amt:Math.round(sp.rooms*rc.furniturePerRoom),basis:\`\${sp.rooms} rooms × \$\${rc.furniturePerRoom.toLocaleString()}\`},
+          {label:'Lobby Furniture',amt:Math.round(rc.lobbyFurniture),basis:'Fixed'},
+          {label:'Bathrooms',amt:Math.round(baths*rc.bathCost),basis:\`\${baths} baths × \$\${rc.bathCost.toLocaleString()}\`},
+          {label:'Arch & Engineering',amt:Math.round(rc.archEng),basis:'Fixed'},
+          {label:'Permitting Fees',amt:Math.round(rc.permitting),basis:'Fixed'},
+          {label:'Exterior Signage',amt:Math.round(rc.signage),basis:'Fixed'},
+          {label:'Opening Inventory',amt:Math.round(rc.inventory),basis:'Fixed'},
+          {label:'Grand Opening Mktg',amt:Math.round(rc.marketing),basis:'Fixed'},
+        ];
+        const totalCapex=items.reduce((s,x)=>s+x.amt,0);
+        return\`<div style="margin-top:12px">
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+            <table style="width:100%;font-size:12px">
+              <thead><tr style="border-bottom:2px solid #e2e8f0">
+                <th style="text-align:left;padding:6px 0;color:#64748b;font-weight:700;font-size:11px">Item</th>
+                <th style="text-align:left;padding:6px 0;color:#64748b;font-weight:700;font-size:11px">Basis</th>
+                <th style="text-align:right;padding:6px 0;color:#64748b;font-weight:700;font-size:11px">Amount</th>
+              </tr></thead>
+              <tbody>
+                \${items.map(v=>\`<tr style="border-bottom:1px solid #f1f5f9">
+                  <td style="padding:6px 0;color:#334155">\${v.label}</td>
+                  <td style="padding:6px 0;color:#64748b;font-size:11px">\${v.basis}</td>
+                  <td style="padding:6px 0;text-align:right;color:#00904a;font-weight:600">\${$(v.amt)}</td>
+                </tr>\`).join('')}
+                <tr style="border-top:2px solid #e2e8f0;background:#f0fdf4">
+                  <td colspan="2" style="padding:8px 0;color:#334155;font-weight:700">TOTAL CAPEX</td>
+                  <td style="padding:8px 0;text-align:right;color:#00904a;font-weight:900;font-size:14px">\${$(totalCapex)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="margin-top:10px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:11px;color:#166534">
+            Based on \${sp.rooms} rooms · \${baths} baths · \${p.sqft?.toLocaleString()||0} sqft. Adjust assumptions in Setup → General CAPEX Assumptions.
+          </div>
+        </div>\`;
+      })():''}
+
 
       <!-- Notes -->
       <div style="margin-top:14px">
@@ -1961,6 +2017,12 @@ function inp(id,val){
     if(!S.scoring)S.scoring={...DEF_SCORING};
     const strKeys=[''];  // all numeric
     S.scoring[key]=strKeys.includes(key)?String(val):parseFloat(val)||0;
+  }
+  else if(id==='rc-reset'){S.reCapex={...DEF_RE_CAPEX};}
+  else if(id.startsWith('rc-')){
+    const key=id.slice(3);
+    if(!S.reCapex)S.reCapex={...DEF_RE_CAPEX};
+    S.reCapex[key]=parseFloat(val)||0;
   }
   else{
     const eqm=id.match(/^eq-(t|p)-(\d+)$/);
@@ -2071,6 +2133,7 @@ function reToggleCollapse(id){
   S.reProps=(S.reProps||[]).map(p=>p.id===id?{...p,collapsed:!p.collapsed}:p);
   save();render();
 }
+function reSetTab(propId,tab){rePropTab[propId]=tab;render();}
 function reTogglePoi(propId,cat){
   const k=propId+'-'+cat;
   rePoiExpanded[k]=!rePoiExpanded[k];
