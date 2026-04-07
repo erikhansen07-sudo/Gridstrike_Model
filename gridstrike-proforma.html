@@ -1080,7 +1080,10 @@ async function autoScoreRE(propId){
     // B09019_003E = households with own children <18
     // B11001_001E = total households
     // Age groups for 18-34: B01001_007..010 (M) + B01001_031..034 (F)
-    const censusVars='B19013_001E,B01002_001E,B01003_001E,B15003_022E,B15003_023E,B15003_024E,B15003_025E,B15003_001E,B11001_001E,B09019_003E,B01001_007E,B01001_008E,B01001_009E,B01001_010E,B01001_031E,B01001_032E,B01001_033E,B01001_034E';
+    // All vars below are confirmed available at ZCTA level in ACS5
+    // Under-18 (family proxy): B01001_003-006 (M) + B01001_027-030 (F)
+    // Young adults 18-34: B01001_007-010 (M) + B01001_031-034 (F)
+    const censusVars='B19013_001E,B01002_001E,B01003_001E,B15003_022E,B15003_023E,B15003_024E,B15003_025E,B15003_001E,B01001_003E,B01001_004E,B01001_005E,B01001_006E,B01001_027E,B01001_028E,B01001_029E,B01001_030E,B01001_007E,B01001_008E,B01001_009E,B01001_010E,B01001_031E,B01001_032E,B01001_033E,B01001_034E';
     const censusUrl=`https://api.census.gov/data/2023/acs/acs5?get=${censusVars}&for=zip%20code%20tabulation%20area:${zip}`;
     const censusRes=await fetch(censusUrl);
     const censusJson=await censusRes.json();
@@ -1099,10 +1102,10 @@ async function autoScoreRE(propId){
     const youngAdultPop=g('B01001_007E')+g('B01001_008E')+g('B01001_009E')+g('B01001_010E')
                        +g('B01001_031E')+g('B01001_032E')+g('B01001_033E')+g('B01001_034E');
     const pctYoungAdult=population>0?Math.round(youngAdultPop/population*100):0;
-    // Households with children
-    const totalHH=g('B11001_001E')||1;
-    const hhWithKids=g('B09019_003E');
-    const pctHHWithKids=Math.round(hhWithKids/totalHH*100);
+    // % under 18 as family proxy (all age groups available at ZCTA level)
+    const under18Pop=g('B01001_003E')+g('B01001_004E')+g('B01001_005E')+g('B01001_006E')
+                    +g('B01001_027E')+g('B01001_028E')+g('B01001_029E')+g('B01001_030E');
+    const pctHHWithKids=population>0?Math.round(under18Pop/population*100):0;
 
     // Income score (0-10)
     let incomeScore=3;
