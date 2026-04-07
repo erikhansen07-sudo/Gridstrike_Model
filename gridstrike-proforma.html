@@ -309,22 +309,26 @@ const LOGO=`<div style="font-family:'Orbitron',sans-serif;font-weight:900;font-s
 
 
 // ─── Real Estate Scoring ──────────────────────────────────────────────────────
+// Total: 100pts — auto-scored except visibility (manual)
+// Rent(15) + Size(10) + Income/Edu(15) + YoungAdult(10) + Family(15) + FootTraffic(15) + Anchor(10) + Parking(5) + Visibility(5)
 function scoreRE(p){
-  const totalRentPerSqft=p.baseRent+(p.cams||0);
-  // Rent efficiency (25pts): ideal <$2.50, bad >$4.50
-  const rentScore=Math.max(0,25-Math.max(0,(totalRentPerSqft-2.00)*10));
-  // Size fit (15pts): ideal 2000-3500sqft
+  const totalRentPerSqft=(p.baseRent||0)+(p.cams||0);
+  // Rent efficiency (15pts): ideal <$2.50, painful >$4.50
+  const rentScore=Math.max(0,15-Math.max(0,(totalRentPerSqft-2.00)*6));
+  // Size fit (10pts): ideal 2000-3500sqft
   const sqft=p.sqft||0;
   const sizeDiff=sqft<2000?2000-sqft:sqft>3500?sqft-3500:0;
-  const sizeScore=Math.max(0,15-sizeDiff/100);
-  // Manual scores (each out of 10, scaled to weights)
-  const demoScore =(p.demographics||5)/10*20;  // 20pts
-  const ftScore   =(p.footTraffic||5)/10*20;   // 20pts
-  const parkScore =(p.parking||5)/10*10;        // 10pts
-  const visScore  =(p.visibility||5)/10*5;      // 5pts
-  const anchorScore=(p.anchorProximity||5)/10*5;// 5pts
-  const total=rentScore+sizeScore+demoScore+ftScore+parkScore+visScore+anchorScore;
-  return{total:Math.round(Math.min(100,total)),rentScore,sizeScore,demoScore,ftScore,parkScore,visScore,anchorScore};
+  const sizeScore=Math.max(0,10-sizeDiff/100);
+  // Auto-scored demos (from Census) — each 0-10 slider OR auto-filled
+  const incomeEduScore=(p.demographics||5)/10*15;   // 15pts: income + education
+  const youngAdultScore=(p.youngAdult||5)/10*10;     // 10pts: % 18-34 in area
+  const familyScore=(p.familyDensity||5)/10*15;      // 15pts: schools + % w/ kids
+  const ftScore=(p.footTraffic||5)/10*15;            // 15pts: nearby POI density
+  const anchorScore=(p.anchorProximity||5)/10*10;    // 10pts: hotels, entertainment
+  const parkScore=(p.parking||5)/10*5;               // 5pts
+  const visScore=(p.visibility||5)/10*5;             // 5pts (manual only)
+  const total=rentScore+sizeScore+incomeEduScore+youngAdultScore+familyScore+ftScore+anchorScore+parkScore+visScore;
+  return{total:Math.round(Math.min(100,total)),rentScore,sizeScore,incomeEduScore,youngAdultScore,familyScore,ftScore,anchorScore,parkScore,visScore};
 }
 function reGrade(score){
   if(score>=85)return{g:'A',c:'#15803d',bg:'#f0fdf4'};
@@ -1059,107 +1063,104 @@ async function autoScoreRE(propId){
     const nomUrl=`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(p.address)}&format=json&limit=1&addressdetails=1`;
     const nomRes=await fetch(nomUrl,{headers:{'Accept-Language':'en','User-Agent':'GridStrike-Proforma/1.0'}});
     const nomJson=await nomRes.json();
-    if(!nomJson||!nomJson.length)throw new Error('Address not found. Try a more specific address (e.g. include city and state).');
+    if(!nomJson||!nomJson.length)throw new Error('Address not found. Try a more specific address (city + state helps).');
     const nom=nomJson[0];
     const lat=parseFloat(nom.lat);
     const lon=parseFloat(nom.lon);
     const displayAddr=nom.display_name;
 
-    // ── Step 2: Get Census Tract via coordinates endpoint (CORS-friendly) ────
+    // ── Step 2: Census Tract via coordinates (CORS-friendly) ─────────────────
     const tractUrl=`https://geocoding.geo.census.gov/geocoder/geographies/coordinates?x=${lon}&y=${lat}&benchmark=Public_AR_Current&vintage=Current_Current&format=json`;
     const tractRes=await fetch(tractUrl);
     const tractJson=await tractRes.json();
     const tractData=tractJson?.result?.geographies?.['Census Tracts']?.[0];
-    if(!tractData)throw new Error('Could not find census tract for this location.');
+    if(!tractData)throw new Error('Could not resolve census tract. Try a full street address.');
     const stFips=tractData.STATE;
     const coFips=tractData.COUNTY;
     const trFips=tractData.TRACT;
 
-    // ── Step 2: Census ACS5 demographics ─────────────────────────────────────
+    // ── Step 3: Census ACS5 — demographics + psychographics ──────────────────
     // B19013_001E = median HH income
-    // B01002_001E = median age
-    // B01003_001E = total population
-    // B25001_001E = housing units (density proxy)
-    const censusUrl=`https://api.census.gov/data/2023/acs/acs5?get=B19013_001E,B01002_001E,B01003_001E&for=tract:${trFips}&in=state:${stFips}%20county:${coFips}`;
+    // B01002_001E = median age, B01003_001E = total pop
+    // B15003_022E = bachelor's degree (25+), B15003_001E = total 25+ pop
+    // B09019_003E = households with own children <18
+    // B11001_001E = total households
+    // Age groups for 18-34: B01001_007..010 (M) + B01001_031..034 (F)
+    const censusVars='B19013_001E,B01002_001E,B01003_001E,B15003_022E,B15003_023E,B15003_024E,B15003_025E,B15003_001E,B11001_001E,B09019_003E,B01001_007E,B01001_008E,B01001_009E,B01001_010E,B01001_031E,B01001_032E,B01001_033E,B01001_034E';
+    const censusUrl=`https://api.census.gov/data/2023/acs/acs5?get=${censusVars}&for=tract:${trFips}&in=state:${stFips}%20county:${coFips}`;
     const censusRes=await fetch(censusUrl);
     const censusJson=await censusRes.json();
-    const censusRow=censusJson[1];  // row 0 = headers
-    const medIncome=parseInt(censusRow[0])||0;
-    const medAge=parseFloat(censusRow[1])||30;
-    const population=parseInt(censusRow[2])||0;
+    const ch=censusJson[0]; const cd=censusJson[1];
+    const g=k=>parseInt(cd[ch.indexOf(k)])||0;
+    const gf=k=>parseFloat(cd[ch.indexOf(k)])||0;
 
-    // Demographics score (0-10):
-    // Income: <40k=3, 40-60k=5, 60-80k=7, 80-100k=8.5, >100k=10
+    const medIncome=g('B19013_001E');
+    const medAge=gf('B01002_001E');
+    const population=g('B01003_001E');
+    // Education: % with bachelor's or higher
+    const pop25plus=g('B15003_001E')||1;
+    const bachelors=g('B15003_022E')+g('B15003_023E')+g('B15003_024E')+g('B15003_025E');
+    const pctBachelors=Math.round(bachelors/pop25plus*100);
+    // Young adults 18-34
+    const youngAdultPop=g('B01001_007E')+g('B01001_008E')+g('B01001_009E')+g('B01001_010E')
+                       +g('B01001_031E')+g('B01001_032E')+g('B01001_033E')+g('B01001_034E');
+    const pctYoungAdult=population>0?Math.round(youngAdultPop/population*100):0;
+    // Households with children
+    const totalHH=g('B11001_001E')||1;
+    const hhWithKids=g('B09019_003E');
+    const pctHHWithKids=Math.round(hhWithKids/totalHH*100);
+
+    // Income score (0-10)
     let incomeScore=3;
     if(medIncome>100000)incomeScore=10;
     else if(medIncome>80000)incomeScore=8.5;
     else if(medIncome>60000)incomeScore=7;
     else if(medIncome>40000)incomeScore=5;
-    // Age: ideal 22-38 for gaming entertainment
-    const ageDiff=Math.abs(medAge-30);
-    const ageScore=Math.max(0,10-ageDiff*0.4);
-    const demoScore=Math.round((incomeScore*0.6+ageScore*0.4)*10)/10;
+    // Education score (0-10): >40% bachelor's = 10
+    const eduScore=Math.min(10,pctBachelors/4);
+    const demoScore=Math.round((incomeScore*0.65+eduScore*0.35)*10)/10;
 
-    // ── Step 3: OSM Overpass — nearby POIs ───────────────────────────────────
-    // Query radius 600m for anchor venues, 400m for foot traffic / parking
+    // Young adult score (0-10): >25% = excellent
+    const youngAdultScore=Math.min(10,pctYoungAdult/2.5);
+
+    // ── Step 4: OSM Overpass — single combined query ─────────────────────────
+    const R5MI=8047; // 5 miles in meters
     const overpassUrl='https://overpass-api.de/api/interpreter';
-    const overpassQuery=`[out:json][timeout:12];
+    const osmQuery=`[out:json][timeout:25];
 (
-  node(around:600,${lat},${lon})[tourism=hotel];
-  node(around:600,${lat},${lon})[tourism=motel];
-  node(around:500,${lat},${lon})[leisure~"fitness_centre|bowling_alley|escape_game|amusement_arcade|sports_centre"];
-  node(around:500,${lat},${lon})[amenity~"cinema|theatre|nightclub"];
-  node(around:400,${lat},${lon})[amenity~"restaurant|cafe|fast_food|bar"];
-  node(around:400,${lat},${lon})[shop];
-  node(around:400,${lat},${lon})[amenity=parking];
-  way(around:400,${lat},${lon})[amenity=parking];
-);
-out count;`;
-    const osmRes=await fetch(overpassUrl,{method:'POST',body:'data='+encodeURIComponent(overpassQuery)});
+  node(around:R600,${lat},${lon})[tourism~"^(hotel|motel)$"];
+  node(around:R600,${lat},${lon})[leisure~"^(fitness_centre|bowling_alley|escape_game|amusement_arcade|sports_centre|stadium)$"];
+  node(around:R600,${lat},${lon})[amenity~"^(cinema|theatre|nightclub)$"];
+  node(around:R400,${lat},${lon})[amenity~"^(restaurant|cafe|fast_food|bar|pub)$"];
+  node(around:R400,${lat},${lon})[shop];
+  node(around:R400,${lat},${lon})[amenity=parking];
+  way(around:R400,${lat},${lon})[amenity=parking];
+  node(around:${R5MI},${lat},${lon})[amenity=school]["school:level"~"^(elementary|middle|primary|secondary)$"];
+  node(around:${R5MI},${lat},${lon})[amenity=school][name~"[Ee]lementary|[Mm]iddle|[Jj]unior"];
+  way(around:${R5MI},${lat},${lon})[amenity=school]["school:level"~"^(elementary|middle|primary|secondary)$"];
+  way(around:${R5MI},${lat},${lon})[amenity=school][name~"[Ee]lementary|[Mm]iddle|[Jj]unior"];
+  node(around:R800,${lat},${lon})[leisure~"^(fitness_centre|gym)$"];
+  node(around:R800,${lat},${lon})[amenity~"^(game_room|amusement_arcade)$"];
+  node(around:R800,${lat},${lon})[leisure="escape_game"];
+).out body;`
+    .replace(/R600/g,'600').replace(/R400/g,'400').replace(/R800/g,'800');
+
+    const osmRes=await fetch(overpassUrl,{method:'POST',body:'data='+encodeURIComponent(osmQuery)});
     const osmJson=await osmRes.json();
+    const els=osmJson.elements||[];
 
-    // Re-query with tags to separate categories
-    const overpassQuery2=`[out:json][timeout:15];
-(
-  node(around:600,${lat},${lon})[tourism~"hotel|motel"];
-  node(around:500,${lat},${lon})[leisure~"fitness_centre|bowling_alley|escape_game|amusement_arcade|sports_centre"];
-  node(around:500,${lat},${lon})[amenity~"cinema|theatre|nightclub"];
-);
-out body;`;
-    const osmRes2=await fetch(overpassUrl,{method:'POST',body:'data='+encodeURIComponent(overpassQuery2)});
-    const osmJson2=await osmRes2.json();
-    const anchorEls=osmJson2.elements||[];
-    const hotels=anchorEls.filter(e=>e.tags&&(e.tags.tourism==='hotel'||e.tags.tourism==='motel')).length;
-    const entertainment=anchorEls.filter(e=>e.tags&&(e.tags.leisure||e.tags.amenity)).length;
+    // Categorize
+    const hotels=els.filter(e=>e.tags&&(e.tags.tourism==='hotel'||e.tags.tourism==='motel')).length;
+    const entertainment=els.filter(e=>e.tags&&(e.tags.leisure||e.tags.amenity==='cinema'||e.tags.amenity==='theatre')).length;
+    const restaurants=els.filter(e=>e.tags&&['restaurant','cafe','fast_food','bar','pub'].includes(e.tags.amenity)).length;
+    const shops=els.filter(e=>e.tags&&e.tags.shop).length;
+    const parkingCount=els.filter(e=>e.tags&&e.tags.amenity==='parking').length;
+    const schools=els.filter(e=>e.tags&&e.tags.amenity==='school').length;
+    const gyms=els.filter(e=>e.tags&&(e.tags.leisure==='fitness_centre'||e.tags.amenity==='gym'||e.tags.leisure==='gym')).length;
+    const competitors=els.filter(e=>e.tags&&(e.tags.leisure==='escape_game'||e.tags.amenity==='amusement_arcade'||e.tags.leisure==='amusement_arcade')).length;
+    const poiCount=restaurants+shops;
 
-    const overpassQuery3=`[out:json][timeout:12];
-(
-  node(around:400,${lat},${lon})[amenity~"restaurant|cafe|fast_food|bar|shop"];
-  node(around:400,${lat},${lon})[shop];
-  node(around:400,${lat},${lon})[amenity=parking];
-  way(around:400,${lat},${lon})[amenity=parking];
-);
-out count;`;
-    const osmRes3=await fetch(overpassUrl,{method:'POST',body:'data='+encodeURIComponent(overpassQuery3)});
-    const osmJson3=await osmRes3.json();
-    const totalPOIs=(osmJson3.elements||[]).reduce((s,e)=>s+(e.tags&&e.tags.total?parseInt(e.tags.total):1),0);
-
-    // Better: just count elements
-    const overpassQuery4=`[out:json][timeout:15];
-(
-  node(around:400,${lat},${lon})[amenity];
-  node(around:400,${lat},${lon})[shop];
-  node(around:300,${lat},${lon})[amenity=parking];
-  way(around:300,${lat},${lon})[amenity=parking];
-);
-out body;`;
-    const osmRes4=await fetch(overpassUrl,{method:'POST',body:'data='+encodeURIComponent(overpassQuery4)});
-    const osmJson4=await osmRes4.json();
-    const els4=osmJson4.elements||[];
-    const poiCount=els4.filter(e=>e.tags&&(e.tags.amenity||e.tags.shop)).length;
-    const parkingCount=els4.filter(e=>e.tags&&e.tags.amenity==='parking').length;
-
-    // Foot traffic score (0-10): based on nearby POI density
+    // Foot traffic score (0-10)
     let ftScore=3;
     if(poiCount>100)ftScore=10;
     else if(poiCount>60)ftScore=8.5;
@@ -1168,24 +1169,33 @@ out body;`;
     else if(poiCount>5)ftScore=4;
 
     // Anchor proximity score (0-10)
-    let anchorScore=Math.min(10, hotels*2.5 + entertainment*1.5);
+    const anchorScore=Math.min(10, hotels*2.5 + entertainment*1.5);
 
     // Parking score (0-10)
-    let parkScore=Math.min(10, parkingCount>5?10:parkingCount>2?8:parkingCount>0?6:3);
+    const parkScore=Math.min(10, parkingCount>5?10:parkingCount>2?8:parkingCount>0?6:3);
 
-    // ── Step 4: Update property scores ───────────────────────────────────────
+    // Family density score (0-10): schools + % households with kids
+    const schoolScore=Math.min(6, schools*0.5);           // up to 6pts from schools
+    const kidsScore=Math.min(4, pctHHWithKids/8);          // up to 4pts from % w/kids
+    const familyScore=Math.round((schoolScore+kidsScore)*10)/10;
+
+    // ── Step 5: Update property scores ───────────────────────────────────────
     S.reProps=S.reProps.map(prop=>{
       if(prop.id!==propId)return prop;
       return{...prop,
         demographics:Math.round(demoScore*10)/10,
+        youngAdult:Math.round(youngAdultScore*10)/10,
+        familyDensity:Math.round(familyScore*10)/10,
         footTraffic:Math.round(ftScore*10)/10,
         anchorProximity:Math.round(anchorScore*10)/10,
         parking:Math.round(parkScore*10)/10,
         _autoScoreData:{
-          lat,lon,
+          lat,lon,displayAddr,
           medIncome,medAge,population,
-          hotels,entertainment,poiCount,parkingCount,
-          geocodedAddress:displayAddr
+          pctBachelors,pctYoungAdult,pctHHWithKids,
+          hotels,entertainment,restaurants,shops,
+          schools,gyms,competitors,
+          poiCount,parkingCount
         }
       };
     });
@@ -1332,10 +1342,12 @@ function rRE(){
         <div>
           <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0">Location Scores <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(rate 1–10)</span></div>
           <div class="g2" style="margin-bottom:12px">
-            ${['demographics','footTraffic','parking','visibility','anchorProximity'].map(k=>{
-              const labels={demographics:'Demographics',footTraffic:'Foot Traffic',parking:'Parking',visibility:'Visibility / Signage',anchorProximity:'Anchor Proximity'};
+            ${['demographics','youngAdult','familyDensity','footTraffic','parking','visibility','anchorProximity'].map(k=>{
+              const labels={demographics:'Income & Education',youngAdult:'Young Adults (18–34)',familyDensity:'Family Density',footTraffic:'Foot Traffic',parking:'Parking',visibility:'Visibility / Signage',anchorProximity:'Anchor Proximity'};
+              const autoKeys=['demographics','youngAdult','familyDensity','footTraffic','parking','anchorProximity'];
+              const isAuto=autoKeys.includes(k);
               return`<div>
-                <label class="label">${labels[k]}</label>
+                <label class="label">${labels[k]}${isAuto?` <span style="font-size:8px;background:#d4fce8;color:#00904a;border-radius:3px;padding:1px 5px;font-weight:700">AUTO</span>`:' <span style="font-size:8px;background:#fef3c7;color:#d97706;border-radius:3px;padding:1px 5px;font-weight:700">MANUAL</span>'}</label>
                 <input type="range" min="1" max="10" value="${p[k]||5}"
                   oninput="reInp('re-${k}-${p.id}',this.value);this.nextElementSibling.textContent=this.value"
                   style="width:100%;accent-color:#00904a">
@@ -1347,13 +1359,15 @@ function rRE(){
           <!-- Score breakdown -->
           <div class="lsec" style="margin-top:4px">
             <div class="lsec-title">Score Breakdown</div>
-            ${scoreBar('Rent Efficiency',sc.rentScore,25,scoreColor)}
-            ${scoreBar('Size Fit',sc.sizeScore,15,scoreColor)}
-            ${scoreBar('Demographics',sc.demoScore,20,scoreColor)}
-            ${scoreBar('Foot Traffic',sc.ftScore,20,scoreColor)}
-            ${scoreBar('Parking',sc.parkScore,10,scoreColor)}
-            ${scoreBar('Visibility',sc.visScore,5,scoreColor)}
-            ${scoreBar('Anchor Proximity',sc.anchorScore,5,scoreColor)}
+            ${scoreBar('Rent Efficiency',sc.rentScore,15,scoreColor)}
+            ${scoreBar('Size Fit',sc.sizeScore,10,scoreColor)}
+            ${scoreBar('Income & Education',sc.incomeEduScore,15,scoreColor)}
+            ${scoreBar('Young Adults (18–34)',sc.youngAdultScore,10,scoreColor)}
+            ${scoreBar('Family Density',sc.familyScore,15,scoreColor)}
+            ${scoreBar('Foot Traffic',sc.ftScore,15,scoreColor)}
+            ${scoreBar('Anchor Proximity',sc.anchorScore,10,scoreColor)}
+            ${scoreBar('Parking',sc.parkScore,5,scoreColor)}
+            ${scoreBar('Visibility (manual)',sc.visScore,5,scoreColor)}
           </div>
         </div>
       </div>
