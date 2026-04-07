@@ -189,7 +189,8 @@ const DEFAULTS={
   devFeeTiers:DEFDFTIERS.map(t=>({...t})),
   reProps:[
     {id:1,address:'3225 Business Park Dr #1, Vista CA 92081',sqft:2250,baseRent:2.75,cams:1.00,leaseTerm:5,linkedUnitId:null,
-     demographics:7,footTraffic:5,parking:7,visibility:5,anchorProximity:7,zoning:'Industrial Flex',notes:'Near Ayres Hotel. Business park — low walk-in. Negotiate CAMS.'}
+     demographics:7,footTraffic:5,parking:7,visibility:5,anchorProximity:7,zoning:'Industrial Flex',notes:'Near Ayres Hotel. Business park — low walk-in. Negotiate CAMS.',
+     friendlyName:'',status:'evaluation',openMonth:null,openYear:null}
   ],
   units:[
     {id:1,name:'Location 1',    om:1,oy:2026,rooms:2,capex:150000,capexItems:DEFCAPEX.map(r=>r[0]),rent:8438,mCogs:2500,mLabor:9250,mMktg:1500,mMisc:1500},
@@ -201,6 +202,11 @@ function migrateState(s){
   if(!s.reProps)s.reProps=[];
   // Heal duplicate reProps IDs (caused by reNextId scoping bug)
   {const seen=new Set();let nxt=1;s.reProps=s.reProps.map(p=>{if(seen.has(p.id)){while(seen.has(nxt))nxt++;p={...p,id:nxt++};}seen.add(p.id);return p;});}
+  // Ensure all reProps have new fields
+  s.reProps=s.reProps.map(p=>({
+    friendlyName:'',status:'evaluation',openMonth:null,openYear:null,
+    ...p
+  }));
   if(!s.distributions)s.distributions=[0,0,0,0,0];
   if(!s.ramp)s.ramp=[.50,.70,.88,1.00,1.00];
   if(!s.capexMatrix)s.capexMatrix=DEFCAPEX.map(r=>[...r]);
@@ -772,8 +778,10 @@ function rScoringConfig(){
 
 // ─── Tab: Unit P&L ─────────────────────────────────────────────────────────
 function rUnits(){
-  const all=S.units.map((u,i)=>({...u,c:cu(u,1*annualCurveMult(u,4),i)}));
-  const selIdx=Math.max(0,S.units.findIndex(u=>u.id===S.sel));
+  const activeIds=new Set((S.reProps||[]).filter(p=>p.status==='active'&&p.linkedUnitId).map(p=>p.linkedUnitId));
+  const allUnits=S.units.filter(u=>activeIds.size===0||activeIds.has(u.id));
+  const all=allUnits.map((u,i)=>({...u,c:cu(u,1*annualCurveMult(u,4),i)}));
+  const selIdx=Math.max(0,allUnits.findIndex(u=>u.id===S.sel));
   const sel=all[selIdx]||all[0];
   const c=sel.c,r=S.rev,cs=S.costs;
   const selComp=c.comp||{devFee:35000,revShare:10,equity:0};
@@ -1653,10 +1661,10 @@ function rRE(){
       <!-- HEADER -->
       <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
         <div style="flex:1;min-width:180px">
-          <input type="text" id="re-addr-${p.id}" value="${esc(p.address)}"
-            placeholder="Enter address (include city + state + ZIP)..."
-            onchange="reInp('re-addr-${p.id}',this.value)"
-            style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 10px;color:#0f172a;font-size:14px;font-weight:700;outline:none">
+          <div style="font-size:14px;font-weight:700;color:#0f172a;padding:7px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;min-height:36px">
+            ${esc(p.friendlyName||p.address||'New Location')}
+            ${p.status==='active'?`<span style="font-size:9px;background:#dcfce7;color:#16a34a;border-radius:3px;padding:1px 5px;font-weight:700;margin-left:6px">ACTIVE</span>`:`<span style="font-size:9px;background:#f1f5f9;color:#64748b;border-radius:3px;padding:1px 5px;font-weight:700;margin-left:6px">EVAL</span>`}
+          </div>
         </div>
         <div style="text-align:center;background:${gr.bg};border:2px solid ${gr.c};border-radius:10px;padding:6px 14px;min-width:72px;flex-shrink:0">
           <div style="font-size:26px;font-weight:900;color:${gr.c};line-height:1">${sc.total}</div>
@@ -1679,9 +1687,9 @@ function rRE(){
       ${collapsed?'':`
       <!-- TAB BAR -->
       <div style="display:flex;gap:0;border-bottom:2px solid #e2e8f0;margin:12px 0 0">
-        ${['details','scoring','capex','opex'].map(t=>{
-          const lbl={details:'📋 Location Details',scoring:'🎯 Scoring',capex:'🏗 CAPEX',opex:'📊 OPEX'}[t];
-          const active=(rePropTab[p.id]||'details')===t;
+        ${['status','details','scoring','capex','opex','pl'].map(t=>{
+          const lbl={status:'📍 Status',details:'📋 Location Details',scoring:'🎯 Scoring',capex:'🏗 CAPEX',opex:'📊 OPEX',pl:'📈 P&L'}[t];
+          const active=(rePropTab[p.id]||'status')===t;
           return`<button onclick="reSetTab(${p.id},'${t}')"
             style="border:none;background:none;padding:8px 16px;font-size:12px;font-weight:${active?700:500};
             color:${active?'#00904a':'#64748b'};border-bottom:${active?'2px solid #00904a':'2px solid transparent'};
@@ -1689,8 +1697,55 @@ function rRE(){
         }).join('')}
       </div>
 
+      <!-- TAB CONTENT: STATUS -->
+      ${(rePropTab[p.id]||'status')==='status'?`<div style="margin-top:14px">
+        <div class="g2" style="margin-bottom:12px">
+          <div>
+            <label class="label">Friendly Name</label>
+            <input type="text" id="re-fname-${p.id}" value="${esc(p.friendlyName||'')}"
+              placeholder="e.g. Chula Vista — Eastlake"
+              onchange="reInp('re-fname-${p.id}',this.value)"
+              style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 10px;color:#0f172a;font-size:13px;outline:none">
+          </div>
+          <div>
+            <label class="label">Location Status</label>
+            <select id="re-status-${p.id}" onchange="reInp('re-status-${p.id}',this.value)">
+              <option value="evaluation"${(p.status||'evaluation')==='evaluation'?' selected':''}>🔍 In Evaluation</option>
+              <option value="active"${p.status==='active'?' selected':''}>✅ Active</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:12px">
+          <label class="label">Address (for scoring)</label>
+          <input type="text" id="re-addr-${p.id}" value="${esc(p.address||'')}"
+            placeholder="Enter full address for auto-score (include city + state + ZIP)..."
+            onchange="reInp('re-addr-${p.id}',this.value)"
+            style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 10px;color:#0f172a;font-size:14px;font-weight:600;outline:none">
+        </div>
+        ${p.status==='active'?`<div class="g2" style="margin-bottom:12px">
+          <div>
+            <label class="label">Open Month</label>
+            <select id="re-openMonth-${p.id}" onchange="reInp('re-openMonth-${p.id}',this.value)">
+              ${['January','February','March','April','May','June','July','August','September','October','November','December'].map((m,i)=>`<option value="${i+1}"${p.openMonth===i+1?' selected':''}>${m}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="label">Open Year</label>
+            <select id="re-openYear-${p.id}" onchange="reInp('re-openYear-${p.id}',this.value)">
+              ${[2025,2026,2027,2028,2029,2030].map(y=>`<option value="${y}"${p.openYear===y?' selected':''}>${y}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;color:#166534;font-weight:600">
+          ✅ Active — this location is live in the financial model as <strong>${esc(p.friendlyName||p.address||'this location')}</strong>
+          ${p.linkedUnitId?`<button onclick="reActivate(${p.id})" style="margin-left:10px;border:none;background:#dcfce7;color:#16a34a;border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">↺ Re-sync to Model</button>`:''}
+        </div>`:`<div style="padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;color:#64748b">
+          🔍 In Evaluation — set status to Active and enter an open date to include in the financial model.
+        </div>`}
+      </div>`:''}
+
       <!-- TAB CONTENT: DETAILS -->
-      ${(rePropTab[p.id]||'details')==='details'?`<div style="margin-top:12px">
+      ${(rePropTab[p.id]||'status')==='details'?`<div style="margin-top:12px">
           <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0">Property Details</div>
           <div class="g3" style="margin-bottom:10px">
             ${ni2(`re-sqft-${p.id}`,'Sq Footage',p.sqft,{step:50,min:500})}
@@ -1726,20 +1781,6 @@ function rRE(){
             </div>
             ${sp.leftover>0?`<div style="font-size:10px;color:#94a3b8;text-align:right">Buffer: ${sp.leftover} sqft</div>`:''}
           </div>
-          <div class="lsec">
-            <div class="lsec-title">Link to Location</div>
-            <select id="re-link-${p.id}" onchange="reInp('re-link-${p.id}',this.value)" style="width:100%;margin-bottom:8px">
-              <option value="">— Not linked —</option>
-              ${S.units.map(u=>`<option value="${u.id}"${p.linkedUnitId===u.id?' selected':''}>${esc(u.name)}</option>`).join('')}
-            </select>
-            ${linked?`<div style="font-size:11px;color:#334155;margin-top:4px">
-              <span style="color:#64748b">Model rent:</span> <strong style="color:#00904a">${$(linked.rent)}/mo</strong>
-              <span style="color:#94a3b8;margin:0 5px">→</span>
-              <span style="color:#64748b">This property:</span>
-              <strong style="color:${monthly>linked.rent*1.1?'#dc2626':monthly<linked.rent*0.9?'#00904a':'#334155'}">${$(monthly)}/mo</strong>
-              <button class="btn-sm" style="margin-left:6px" onclick="reSyncRent(${p.id})">Sync Rent →</button>
-            </div>`:`<div style="font-size:11px;color:#94a3b8">Link a location to sync rent into the model.</div>`}
-          </div>
           <div style="margin-top:10px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
             ${[['Total $/sqft/mo','#334155',((p.baseRent||0)+(p.cams||0)).toFixed(2)],['Monthly Rent','#334155',$(monthly)],[`Est. Revenue (${sc.projRooms} rooms)`,'#334155',$(Math.round(sc.monthlyRevenue))],['10% Rent Ceiling','#64748b',$(Math.round(sc.monthlyRevenue*0.10))+'/mo · $'+sc.rentCeilPsf.toFixed(2)+'/sqft']].map(([lb,cl,vl])=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:#64748b">${lb}</span><strong style="color:${cl}">${vl}</strong></div>`).join('')}
             <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;border-top:1px solid #e2e8f0;padding-top:6px;margin-top:4px">
@@ -1750,7 +1791,7 @@ function rRE(){
         </div>`:''}
 
       <!-- TAB CONTENT: SCORING -->
-      ${(rePropTab[p.id]||'details')==='scoring'?`<div style="margin-top:12px">
+      ${(rePropTab[p.id]||'status')==='scoring'?`<div style="margin-top:12px">
         ${autoData?`
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:12px">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
@@ -1835,7 +1876,7 @@ function rRE(){
       </div>`:''}
 
       <!-- TAB CONTENT: CAPEX -->
-      ${(rePropTab[p.id]||'details')==='capex'?(()=>{
+      ${(rePropTab[p.id]||'status')==='capex'?(()=>{
         const amts=p.reCapexAmts||{};
         const rc=Object.assign({},DEF_RE_CAPEX,S.reCapex||{});
         const rows=[
@@ -1895,7 +1936,7 @@ function rRE(){
       })():''}
 
       <!-- TAB CONTENT: OPEX -->
-      ${(rePropTab[p.id]||'details')==='opex'?(()=>{
+      ${(rePropTab[p.id]||'status')==='opex'?(()=>{
         const amts=p.reOpexAmts||{};
         const ro=Object.assign({},DEF_RE_OPEX,S.reOpex||{});
         const rows=[
@@ -1957,6 +1998,57 @@ function rRE(){
         </div>`;
       })():''}
 
+      <!-- TAB CONTENT: P&L -->
+      ${(rePropTab[p.id]||'status')==='pl'?(()=>{
+        const r=S.rev;
+        const flatRev=Math.round(sp.rooms*r.sessions*r.price*(r.util/100)*365/12*(1+(r.addon||0)/100));
+        const rentMo=Math.round(((p.baseRent||0)+(p.cams||0))*(p.sqft||0));
+        const opexAmts=p.reOpexAmts||{};
+        const totalOpex=Object.values(opexAmts).reduce((s,v)=>s+(v||0),0);
+        const totalAll=totalOpex+rentMo;
+        const ebitda=flatRev-totalAll;
+        const margin=flatRev>0?Math.round(ebitda/flatRev*100):0;
+        const totalCapex=p.reCapexAmts?Object.values(p.reCapexAmts).reduce((s,v)=>s+(v||0),0):0;
+        const annualEbitda=ebitda*12;
+        const payback=annualEbitda>0?(totalCapex/annualEbitda).toFixed(1):null;
+        const ebitdaColor=ebitda>0?'#00904a':ebitda<0?'#dc2626':'#64748b';
+        const rows=[
+          ['Revenue (flat steady-state)',flatRev,CY,true],
+          ['Rent',-rentMo,'#64748b',false],
+          ['Supplies',-(opexAmts.supplies||0),'#64748b',false],
+          ['Labor',-(opexAmts.labor||0),'#64748b',false],
+          ['Marketing',-(opexAmts.marketing||0),'#64748b',false],
+          ['Utilities',-(opexAmts.utilities||0),'#64748b',false],
+          ['Misc',-(opexAmts.misc||0),'#64748b',false],
+        ];
+        return`<div style="margin-top:12px">
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px">
+            <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Monthly P&L — Flat / Steady-State</div>
+            <div style="font-size:10px;color:#94a3b8;margin-bottom:8px">Uses Setup revenue assumptions · ${sp.rooms} rooms · Performance curves not applied</div>
+            ${rows.map(([lbl,val,color,bold])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #f1f5f9">
+              <span style="color:${bold?'#334155':'#64748b'}">${lbl}</span>
+              <strong style="color:${color}">${val>=0?$(val):'('+$(Math.abs(val))+')'}</strong>
+            </div>`).join('')}
+            <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:900;padding:8px 0;margin-top:4px;border-top:2px solid #e2e8f0">
+              <span style="color:#334155">Monthly EBITDA</span>
+              <strong style="color:${ebitdaColor}">${ebitda>=0?$(ebitda):'('+$(Math.abs(ebitda))+')'} <span style="font-size:11px">(${margin}%)</span></strong>
+            </div>
+          </div>
+          ${totalCapex>0?`<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+              <span style="color:#64748b">Total CAPEX</span><strong style="color:#334155">${$(totalCapex)}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+              <span style="color:#64748b">Annual EBITDA</span><strong style="color:${ebitdaColor}">${$(Math.round(annualEbitda))}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:6px 0;border-top:1px solid #e2e8f0;margin-top:4px">
+              <span style="color:#334155">Est. Payback</span>
+              <strong style="color:${payback&&parseFloat(payback)<5?CY:payback&&parseFloat(payback)<8?AM:PK}">${payback?payback+' yrs':'N/A'}</strong>
+            </div>
+          </div>`:''}
+        </div>`;
+      })():''}
+
       <!-- Notes -->
       <div style="margin-top:14px">
         <label class="label">Notes</label>
@@ -1968,19 +2060,25 @@ function rRE(){
     </div>`;
   }).join('');
 
-  // Summary comparison table
-  const summaryRows=props.map(p=>{
+  // All locations table
+  const allLocRows=props.map(p=>{
     const sc=scoreRE(p);
+    const sp2=spaceCalc(p.sqft,p.bathrooms||1);
     const gr=reGrade(sc.total);
-    const monthly=(p.baseRent+(p.cams||0))*p.sqft;
-    const linked=p.linkedUnitId?S.units.find(u=>u.id===p.linkedUnitId):null;
+    const isActive=p.status==='active';
+    const estRev=Math.round(sc.monthlyRevenue);
+    const totalOpex=p.reOpexAmts?Object.values(p.reOpexAmts).reduce((s,v)=>s+(v||0),0):0;
+    const totalCapex=p.reCapexAmts?Object.values(p.reCapexAmts).reduce((s,v)=>s+(v||0),0):0;
     return`<tr style="background:#fff">
-      <td style="font-weight:600;color:#334155">${esc(p.address||'—')}</td>
+      <td><span style="background:${isActive?'#dcfce7':'#f1f5f9'};color:${isActive?'#16a34a':'#64748b'};border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700">${isActive?'ACTIVE':'EVAL'}</span></td>
+      <td style="font-weight:600;color:#334155">${esc(p.friendlyName||'—')}</td>
+      <td style="color:#64748b;font-size:11px">${esc(p.address||'—')}</td>
       <td>${p.sqft?.toLocaleString()||'—'}</td>
-      <td>$${((p.baseRent||0)+(p.cams||0)).toFixed(2)}</td>
-      <td style="font-weight:600">${$(monthly)}/mo</td>
-      <td><span style="background:${gr.bg};color:${gr.c};border-radius:6px;padding:3px 10px;font-weight:700;font-size:12px">${sc.total} ${gr.g}</span></td>
-      <td style="color:#64748b">${linked?esc(linked.name):'—'}</td>
+      <td>${sp2.rooms}</td>
+      <td style="color:${CY};font-weight:600">${estRev>0?$(estRev):'—'}</td>
+      <td style="color:#334155">${totalOpex>0?$(totalOpex)+'/mo':'—'}</td>
+      <td style="color:#334155">${totalCapex>0?$(totalCapex):'—'}</td>
+      <td><span style="background:${gr.bg};color:${gr.c};border-radius:6px;padding:2px 8px;font-weight:700;font-size:11px">${sc.total} ${gr.g}</span></td>
     </tr>`;
   }).join('');
 
@@ -1993,13 +2091,13 @@ function rRE(){
       <button class="btn" onclick="reAdd()">+ Add Property</button>
     </div>
 
-    ${props.length>1?`<div class="card" style="margin-bottom:16px">
-      <div class="card-title">Comparison</div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">All Locations</div>
       <div style="overflow-x:auto"><table>
-        <thead><tr>${['Address','Sq Ft','$/sqft','Monthly Rent','Score','Linked Location'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
-        <tbody>${summaryRows}</tbody>
+        <thead><tr>${['Status','Friendly Name','Address','Sq Ft','Rooms','Est Rev/mo','Est OPEX/mo','Est CAPEX','Score'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+        <tbody>${allLocRows}</tbody>
       </table></div>
-    </div>`:''}
+    </div>
 
     ${propCards}`;
 }
@@ -2010,10 +2108,9 @@ function render(){
   const P2=port();
   const tRooms=S.units.reduce((s,u)=>s+u.rooms,0);
   const TABS=[
-    {id:'re',       label:'Real Estate'},
     {id:'setup',    label:'Setup'},
-    {id:'locations',label:'Locations'},
-    {id:'perf',     label:'Performance'},
+    {id:'re',       label:'Real Estate'},
+    {id:'perf',     label:'Performance Curve'},
     {id:'units',    label:'Unit P&L'},
     {id:'syspl',    label:'System P&L'},
     {id:'portfolio',label:'Portfolio'},
@@ -2022,10 +2119,9 @@ function render(){
     {id:'monthly',  label:'Monthly CF'},
   ];
   let body='';
-  if(S.tab==='re')        body=rRE();
-  if(S.tab==='locations') body=rLoc();
-  if(S.tab==='perf')      body=rPerf();
   if(S.tab==='setup')     body=rSetup();
+  if(S.tab==='re')        body=rRE();
+  if(S.tab==='perf')      body=rPerf();
   if(S.tab==='units')     body=rUnits();
   if(S.tab==='syspl')     body=rSysPL();
   if(S.tab==='portfolio') body=rPort();
@@ -2258,6 +2354,36 @@ function reSyncRent(propId){
   S.units=S.units.map(u=>u.id===p.linkedUnitId?{...u,rent:monthly}:u);
   render();save();
 }
+function reActivate(propId){
+  const p=(S.reProps||[]).find(x=>x.id===propId);
+  if(!p)return;
+  const sp=spaceCalc(p.sqft,p.bathrooms||1);
+  const totalCapex=p.reCapexAmts?Object.values(p.reCapexAmts).reduce((s,v)=>s+(v||0),0):0;
+  const rent=Math.round(((p.baseRent||0)+(p.cams||0))*(p.sqft||0));
+  const mCogs=p.reOpexAmts?.supplies||2500;
+  const mLabor=p.reOpexAmts?.labor||9250;
+  const mMktg=p.reOpexAmts?.marketing||1500;
+  const mMisc=(p.reOpexAmts?.misc||500)+(p.reOpexAmts?.utilities||0);
+  const unitName=p.friendlyName||p.address||'Location';
+  const oy=p.openYear||2026;
+  const om=p.openMonth||1;
+  if(p.linkedUnitId&&S.units.find(u=>u.id===p.linkedUnitId)){
+    S.units=S.units.map(u=>u.id!==p.linkedUnitId?u:{
+      ...u,name:unitName,rooms:sp.rooms,capex:totalCapex||u.capex,
+      capexItems:capexItemsForRooms(sp.rooms),rent,mCogs,mLabor,mMktg,mMisc,oy,om
+    });
+  } else {
+    const id=nid++;
+    const newUnit={id,name:unitName,om,oy,rooms:sp.rooms,
+      capex:totalCapex||150000,capexItems:capexItemsForRooms(sp.rooms),
+      rent,mCogs,mLabor,mMktg,mMisc,devFee:35000,revShare:10,curve:'flat'};
+    S.units=[...S.units,newUnit];
+    S.reProps=S.reProps.map(x=>x.id===propId?{...x,linkedUnitId:id}:x);
+    // Also grow comp array if needed
+    while(S.comp.length<S.units.length)S.comp.push({devFee:35000,revShare:10,equity:0});
+  }
+  save();render();
+}
 function reInp(id,val){
   if(!S.reProps)S.reProps=[];
   const n=parseFloat(val);
@@ -2285,23 +2411,29 @@ function reInp(id,val){
     });
     save();render();return;
   }
-  const m=id.match(/^re-(addr|sqft|br|cams|term|zone|notes|link|demographics|footTraffic|parking|visibility|anchorProximity|youngAdult|familyDensity|baths)-(\d+)$/);
+  const m=id.match(/^re-(addr|fname|status|openMonth|openYear|sqft|br|cams|term|zone|notes|link|demographics|footTraffic|parking|visibility|anchorProximity|youngAdult|familyDensity|baths)-(\d+)$/);
   if(!m)return;
   const [,field,pidStr]=m;
   const pid=parseInt(pidStr);
-  const keyMap={addr:'address',sqft:'sqft',br:'baseRent',cams:'cams',term:'leaseTerm',
+  const keyMap={addr:'address',fname:'friendlyName',status:'status',openMonth:'openMonth',openYear:'openYear',sqft:'sqft',br:'baseRent',cams:'cams',term:'leaseTerm',
     zone:'zoning',notes:'notes',link:'linkedUnitId',
     demographics:'demographics',footTraffic:'footTraffic',parking:'parking',
     visibility:'visibility',anchorProximity:'anchorProximity',
     youngAdult:'youngAdult',familyDensity:'familyDensity',baths:'bathrooms'};
   const key=keyMap[field];
   if(!key)return;
+  // If status just set to active, trigger sync after map
+  const oldProps=S.reProps;
   S.reProps=S.reProps.map(p=>{
     if(p.id!==pid)return p;
-    if(key==='address'||key==='zoning'||key==='notes')return{...p,[key]:String(val)};
+    if(key==='address'||key==='zoning'||key==='notes'||key==='friendlyName'||key==='status')return{...p,[key]:String(val)};
+    if(key==='openMonth'||key==='openYear')return{...p,[key]:val?parseInt(val):null};
     if(key==='linkedUnitId')return{...p,[key]:val?parseInt(val):null};
     return{...p,[key]:isNaN(n)?p[key]:n};
   });
+  if(key==='status'&&String(val)==='active'){
+    reActivate(pid);return;
+  }
   render();save();
 }
 function setTab(t){S.tab=t;render();}
