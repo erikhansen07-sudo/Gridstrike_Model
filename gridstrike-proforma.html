@@ -1055,19 +1055,25 @@ async function autoScoreRE(propId){
   reScoreStatus[propId]='loading';render();
 
   try{
-    // ── Step 1: Geocode via Census Geocoder ──────────────────────────────────
-    const geoUrl=`https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress?address=${encodeURIComponent(p.address)}&benchmark=Public_AR_Current&vintage=Current_Current&format=json`;
-    const geoRes=await fetch(geoUrl);
-    const geoJson=await geoRes.json();
-    const matches=geoJson?.result?.addressMatches;
-    if(!matches||!matches.length)throw new Error('Address not found by Census geocoder.');
-    const match=matches[0];
-    const lat=parseFloat(match.coordinates.y);
-    const lon=parseFloat(match.coordinates.x);
-    const tract=match.geographies['Census Tracts'][0];
-    const stFips=tract.STATE;
-    const coFips=tract.COUNTY;
-    const trFips=tract.TRACT;
+    // ── Step 1: Geocode via Nominatim (OSM) — CORS-friendly ─────────────────
+    const nomUrl=`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(p.address)}&format=json&limit=1&addressdetails=1`;
+    const nomRes=await fetch(nomUrl,{headers:{'Accept-Language':'en','User-Agent':'GridStrike-Proforma/1.0'}});
+    const nomJson=await nomRes.json();
+    if(!nomJson||!nomJson.length)throw new Error('Address not found. Try a more specific address (e.g. include city and state).');
+    const nom=nomJson[0];
+    const lat=parseFloat(nom.lat);
+    const lon=parseFloat(nom.lon);
+    const displayAddr=nom.display_name;
+
+    // ── Step 2: Get Census Tract via coordinates endpoint (CORS-friendly) ────
+    const tractUrl=`https://geocoding.geo.census.gov/geocoder/geographies/coordinates?x=${lon}&y=${lat}&benchmark=Public_AR_Current&vintage=Current_Current&format=json`;
+    const tractRes=await fetch(tractUrl);
+    const tractJson=await tractRes.json();
+    const tractData=tractJson?.result?.geographies?.['Census Tracts']?.[0];
+    if(!tractData)throw new Error('Could not find census tract for this location.');
+    const stFips=tractData.STATE;
+    const coFips=tractData.COUNTY;
+    const trFips=tractData.TRACT;
 
     // ── Step 2: Census ACS5 demographics ─────────────────────────────────────
     // B19013_001E = median HH income
@@ -1179,7 +1185,7 @@ out body;`;
           lat,lon,
           medIncome,medAge,population,
           hotels,entertainment,poiCount,parkingCount,
-          geocodedAddress:match.matchedAddress
+          geocodedAddress:displayAddr
         }
       };
     });
@@ -1256,7 +1262,7 @@ function rRE(){
                 ${isLoading?'⟳ Scoring…':'⚡ Auto-Score'}
               </button>
               ${isDone&&autoData?`<div style="font-size:9px;color:#64748b;text-align:center;max-width:110px">
-                📍 ${esc(autoData.geocodedAddress.split(',')[0])}<br>
+                📍 ${esc((autoData.geocodedAddress||'').split(',')[0])}<br>
                 👥 $${Math.round(autoData.medIncome/1000)}k income · Age ${autoData.medAge}<br>
                 🏨 ${autoData.hotels} hotels · 🏪 ${autoData.poiCount} POIs
               </div>`:''}
