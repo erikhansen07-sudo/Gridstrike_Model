@@ -1061,7 +1061,7 @@ async function autoScoreRE(propId){
   try{
     // ── Step 1: Geocode via Nominatim (OSM) — CORS-friendly ─────────────────
     const nomUrl=`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(p.address)}&format=json&limit=1&addressdetails=1`;
-    const nomRes=await fetch(nomUrl,{headers:{'Accept-Language':'en','User-Agent':'GridStrike-Proforma/1.0'}});
+    const nomRes=await fetch(nomUrl,{headers:{'Accept-Language':'en'}});
     const nomJson=await nomRes.json();
     if(!nomJson||!nomJson.length)throw new Error('Address not found. Try a more specific address (city + state helps).');
     const nom=nomJson[0];
