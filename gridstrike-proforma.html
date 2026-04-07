@@ -1123,22 +1123,19 @@ async function autoScoreRE(propId){
     const youngAdultScore=Math.min(10,pctYoungAdult/2.5);
 
     // ── Step 4: OSM Overpass — combined query ────────────────────────────────
-    const overpassUrl='https://overpass.kumi.systems/api/interpreter';
-    const osmQuery=`[out:json][timeout:30];
+    const overpassUrl='https://overpass-api.de/api/interpreter';
+    const osmQuery=`[out:json][timeout:20][maxsize:512000];
 (
   node(around:600,${lat},${lon})[tourism=hotel];
   node(around:600,${lat},${lon})[tourism=motel];
   node(around:600,${lat},${lon})[amenity=cinema];
-  node(around:600,${lat},${lon})[amenity=theatre];
   node(around:400,${lat},${lon})[amenity=restaurant];
   node(around:400,${lat},${lon})[amenity=cafe];
   node(around:400,${lat},${lon})[amenity=fast_food];
-  node(around:400,${lat},${lon})[amenity=bar];
   node(around:400,${lat},${lon})[shop];
   node(around:400,${lat},${lon})[amenity=parking];
   way(around:400,${lat},${lon})[amenity=parking];
-  node(around:8047,${lat},${lon})[amenity=school];
-  way(around:8047,${lat},${lon})[amenity=school];
+  node(around:3200,${lat},${lon})[amenity=school];
   node(around:800,${lat},${lon})[leisure=fitness_centre];
   node(around:800,${lat},${lon})[leisure=escape_game];
   node(around:800,${lat},${lon})[amenity=amusement_arcade];
