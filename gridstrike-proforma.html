@@ -1183,10 +1183,10 @@ async function autoScoreRE(propId){
       const d=await r.json();
       return(d.places||[]);
     }
-    // Helper: Google Places Text Search (for queries not covered by type taxonomy)
+    // Helper: Google Places Text Search (locationBias — circle is valid here, not in restriction)
     async function gpText(query, radiusM, maxCount=20){
       const body={textQuery:query,maxResultCount:Math.min(20,maxCount),
-        locationRestriction:{circle:{center:{latitude:lat,longitude:lon},radius:radiusM}}};
+        locationBias:{circle:{center:{latitude:lat,longitude:lon},radius:radiusM}}};
       const r=await fetch('https://places.googleapis.com/v1/places:searchText',{
         method:'POST',
         headers:{'Content-Type':'application/json','X-Goog-Api-Key':gpKey,
@@ -1203,7 +1203,7 @@ async function autoScoreRE(propId){
       // Use Google Places — accurate, real-world data
       try{
         const gpName=p=>p.displayName?.text||p.displayName||'Unknown';
-        const [hotelRes,schoolRes,restRes,shopRes,gymRes,officeRes] = await Promise.all([
+        const settled=await Promise.allSettled([
           gpSearch(['hotel','motel','lodging'], 3218),
           gpSearch(['school','primary_school','secondary_school','university'], 8047, 20),
           gpSearch(['restaurant','cafe','fast_food_restaurant','bar'], 400, 20),
@@ -1211,6 +1211,7 @@ async function autoScoreRE(propId){
           gpSearch(['gym','fitness_center'], 1600),
           gpText('corporate office OR office park OR business park', 3218)
         ]);
+        const [hotelRes,schoolRes,restRes,shopRes,gymRes,officeRes]=settled.map(s=>s.status==='fulfilled'?s.value:[]);
         hotels=hotelRes.length;
         schools=schoolRes.length;
         restaurants=restRes.length;
