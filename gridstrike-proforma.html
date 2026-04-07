@@ -1183,6 +1183,20 @@ async function autoScoreRE(propId){
       const d=await r.json();
       return(d.places||[]);
     }
+    // Helper: Google Places Text Search (for queries not covered by type taxonomy)
+    async function gpText(query, radiusM, maxCount=20){
+      const body={textQuery:query,maxResultCount:Math.min(20,maxCount),
+        locationRestriction:{circle:{center:{latitude:lat,longitude:lon},radius:radiusM}}};
+      const r=await fetch('https://places.googleapis.com/v1/places:searchText',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-Goog-Api-Key':gpKey,
+          'X-Goog-FieldMask':'places.id,places.displayName'},
+        body:JSON.stringify(body)
+      });
+      if(!r.ok)throw new Error('Places Text API '+r.status);
+      const d=await r.json();
+      return(d.places||[]);
+    }
 
     let poiLists={hotels:[],schools:[],restaurants:[],shops:[],gyms:[],offices:[]};
     if(gpKey){
@@ -1195,7 +1209,7 @@ async function autoScoreRE(propId){
           gpSearch(['restaurant','cafe','fast_food_restaurant','bar'], 400, 20),
           gpSearch(['store','shopping_mall','supermarket','convenience_store'], 400, 20),
           gpSearch(['gym','fitness_center'], 1600),
-          gpSearch(['corporate_office','office_space'], 3218)
+          gpText('corporate office OR office park OR business park', 3218)
         ]);
         hotels=hotelRes.length;
         schools=schoolRes.length;
@@ -1359,6 +1373,7 @@ function rRE(){
       const curVal=+(p[d.k]||5);
       const autoVal=autoVals[d.k];
       const isOverridden=d.k&&autoVal!=null&&Math.abs(curVal-autoVal)>0.05;
+      const sliderColor=isOverridden?'#d97706':'#00904a';
       const accentColor=isOverridden?'#d97706':scoreColor;
       const badge=!d.k
         ?`<span style="font-size:8px;background:#d4fce8;color:#00904a;border-radius:3px;padding:1px 4px;font-weight:700;margin-left:4px">AUTO</span>`
@@ -1372,7 +1387,7 @@ function rRE(){
           <span style="font-size:11px;font-weight:700;color:#475569;min-width:120px;flex-shrink:0">${d.label}${badge}</span>
           ${d.k?`<input type="range" min="1" max="10" step="0.1" value="${curVal}"
             oninput="reInp('re-${d.k}-${p.id}',this.value)"
-            style="flex:1;accent-color:${accentColor};height:3px;min-width:60px">`
+            style="flex:1;accent-color:${sliderColor};height:3px;min-width:60px">`
             :`<div style="flex:1;height:3px;background:#f1f5f9;border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${accentColor};border-radius:2px"></div></div>`}
           <span style="font-size:11px;font-weight:700;color:${accentColor};min-width:64px;text-align:right;flex-shrink:0">${d.score.toFixed(1)} / ${d.max}pts</span>
           ${d.k&&isOverridden?`<button onclick="reResetDim(${p.id},'${d.k}')" title="Reset to auto-scored value"
