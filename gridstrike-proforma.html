@@ -1109,45 +1109,88 @@ async function autoScoreRE(propId){
     const lon=parseFloat(nom.lon);
     const displayAddr=nom.display_name;
 
-    // ── Step 2: ZIP code from Nominatim response (no extra API needed) ───────
-    const zip=nom.address?.postcode?.split('-')[0];
-    if(!zip)throw new Error('Could not determine ZIP code from address. Add a ZIP code and retry.');
+    // ── Step 2: Census tract discovery via FCC Block API (CORS-friendly) ───────
+    // Sample 8 compass points × 3 radii (3, 4, 5mi) + center = 25 parallel calls
+    // FCC API returns state+county+tract from any lat/lon — no spatial DB needed
+    function offsetLL(la,lo,miles,deg){
+      const R=3959,b=deg*Math.PI/180,la1=la*Math.PI/180,lo1=lo*Math.PI/180;
+      const la2=Math.asin(Math.sin(la1)*Math.cos(miles/R)+Math.cos(la1)*Math.sin(miles/R)*Math.cos(b));
+      const lo2=lo1+Math.atan2(Math.sin(b)*Math.sin(miles/R)*Math.cos(la1),Math.cos(miles/R)-Math.sin(la1)*Math.sin(la2));
+      return{lat:la2*180/Math.PI,lon:lo2*180/Math.PI};
+    }
+    const dirs=[0,45,90,135,180,225,270,315];
+    const samples=[{lat,lon,ring:0}];
+    [3,4,5].forEach(r=>dirs.forEach(d=>{const pt=offsetLL(lat,lon,r,d);samples.push({...pt,ring:r});}));
 
-    // ── Step 3: Census ACS5 at ZIP/ZCTA level — no tract lookup needed ───────
-    // B19013_001E = median HH income
-    // B01002_001E = median age, B01003_001E = total pop
-    // B15003_022E = bachelor's degree (25+), B15003_001E = total 25+ pop
-    // B09019_003E = households with own children <18
-    // B11001_001E = total households
-    // Age groups for 18-34: B01001_007..010 (M) + B01001_031..034 (F)
-    // All vars below are confirmed available at ZCTA level in ACS5
-    // Under-18 (family proxy): B01001_003-006 (M) + B01001_027-030 (F)
-    // Young adults 18-34: B01001_007-010 (M) + B01001_031-034 (F)
+    const fccRes=await Promise.allSettled(
+      samples.map(pt=>
+        fetch(`https://geo.fcc.gov/api/census/block/find?latitude=${pt.lat.toFixed(6)}&longitude=${pt.lon.toFixed(6)}&format=json`)
+          .then(r=>r.json()).then(d=>({ring:pt.ring,fips:d.Block?.FIPS}))
+      )
+    );
+
+    // Tract GEOID = first 11 chars of FIPS (state 2 + county 3 + tract 6)
+    const tractsByRing={3:new Set(),4:new Set(),5:new Set()};
+    fccRes.forEach(res=>{
+      if(res.status!=='fulfilled'||!res.value?.fips)return;
+      const{ring,fips}=res.value;
+      const geoid=fips.slice(0,11);
+      // A point at radius r means that tract is ≤r miles away — add to all rings ≥r
+      if(ring<=3)tractsByRing[3].add(geoid);
+      if(ring<=4)tractsByRing[4].add(geoid);
+      tractsByRing[5].add(geoid);
+    });
+    const allGeoIds=[...tractsByRing[5]];
+
+    // ── Step 3: ACS5 multi-tract query + ring aggregation ────────────────────
     const censusVars='B19013_001E,B01002_001E,B01003_001E,B15003_022E,B15003_023E,B15003_024E,B15003_025E,B15003_001E,B01001_003E,B01001_004E,B01001_005E,B01001_006E,B01001_027E,B01001_028E,B01001_029E,B01001_030E,B01001_007E,B01001_008E,B01001_009E,B01001_010E,B01001_031E,B01001_032E,B01001_033E,B01001_034E';
-    const censusUrl=`https://api.census.gov/data/2023/acs/acs5?get=${censusVars}&for=zip%20code%20tabulation%20area:${zip}`;
-    const censusRes=await fetch(censusUrl);
-    const censusText=await censusRes.text();
-    if(censusText.trim().startsWith('<'))throw new Error('Census API error: '+censusText.slice(0,120));
-    const censusJson=JSON.parse(censusText);
-    const ch=censusJson[0]; const cd=censusJson[1];
-    const g=k=>parseInt(cd[ch.indexOf(k)])||0;
-    const gf=k=>parseFloat(cd[ch.indexOf(k)])||0;
+    // Group by state+county (ACS5 requires in=state:XX+county:YYY)
+    const byCounty={};
+    allGeoIds.forEach(geoid=>{
+      const key=geoid.slice(0,5);
+      if(!byCounty[key])byCounty[key]={state:geoid.slice(0,2),county:geoid.slice(2,5),tracts:[]};
+      byCounty[key].tracts.push(geoid.slice(5,11));
+    });
+    const tractData={};
+    await Promise.all(Object.values(byCounty).map(async grp=>{
+      try{
+        const url=`https://api.census.gov/data/2023/acs/acs5?get=${censusVars}&for=tract:${grp.tracts.join(',')}&in=state:${grp.state}+county:${grp.county}`;
+        const rows=await(await fetch(url)).json();
+        const hdr=rows[0];
+        rows.slice(1).forEach(row=>{
+          const obj={};hdr.forEach((h,i)=>obj[h]=row[i]);
+          tractData[obj.state+obj.county+obj.tract]=obj;
+        });
+      }catch(e){console.warn('ACS5 tract error',e);}
+    }));
 
-    const medIncome=g('B19013_001E');
-    const medAge=gf('B01002_001E');
-    const population=g('B01003_001E');
-    // Education: % with bachelor's or higher
-    const pop25plus=g('B15003_001E')||1;
-    const bachelors=g('B15003_022E')+g('B15003_023E')+g('B15003_024E')+g('B15003_025E');
-    const pctBachelors=Math.round(bachelors/pop25plus*100);
-    // Young adults 18-34
-    const youngAdultPop=g('B01001_007E')+g('B01001_008E')+g('B01001_009E')+g('B01001_010E')
-                       +g('B01001_031E')+g('B01001_032E')+g('B01001_033E')+g('B01001_034E');
-    const pctYoungAdult=population>0?Math.round(youngAdultPop/population*100):0;
-    // % under 18 as family proxy (all age groups available at ZCTA level)
-    const under18Pop=g('B01001_003E')+g('B01001_004E')+g('B01001_005E')+g('B01001_006E')
-                    +g('B01001_027E')+g('B01001_028E')+g('B01001_029E')+g('B01001_030E');
-    const pctHHWithKids=population>0?Math.round(under18Pop/population*100):0;
+    function aggRing(geoids){
+      const data=geoids.map(id=>tractData[id]).filter(Boolean);
+      if(!data.length)return null;
+      const gi=(d,k)=>parseInt(d[k])||0;
+      const totalPop=data.reduce((s,d)=>s+gi(d,'B01003_001E'),0);
+      if(!totalPop)return null;
+      let incWt=0,incPop=0;
+      data.forEach(d=>{const inc=gi(d,'B19013_001E'),pop=gi(d,'B01003_001E');if(inc>0){incWt+=inc*pop;incPop+=pop;}});
+      const medIncome=incPop>0?Math.round(incWt/incPop):0;
+      const medAge=Math.round(data.reduce((s,d)=>s+gi(d,'B01002_001E')*gi(d,'B01003_001E'),0)/totalPop);
+      const pop25=data.reduce((s,d)=>s+gi(d,'B15003_001E'),0)||1;
+      const bach=data.reduce((s,d)=>s+gi(d,'B15003_022E')+gi(d,'B15003_023E')+gi(d,'B15003_024E')+gi(d,'B15003_025E'),0);
+      const pctBachelors=Math.round(bach/pop25*100);
+      const ya=data.reduce((s,d)=>s+gi(d,'B01001_007E')+gi(d,'B01001_008E')+gi(d,'B01001_009E')+gi(d,'B01001_010E')+gi(d,'B01001_031E')+gi(d,'B01001_032E')+gi(d,'B01001_033E')+gi(d,'B01001_034E'),0);
+      const pctYoungAdult=Math.round(ya/totalPop*100);
+      const u18=data.reduce((s,d)=>s+gi(d,'B01001_003E')+gi(d,'B01001_004E')+gi(d,'B01001_005E')+gi(d,'B01001_006E')+gi(d,'B01001_027E')+gi(d,'B01001_028E')+gi(d,'B01001_029E')+gi(d,'B01001_030E'),0);
+      const pctUnder18=Math.round(u18/totalPop*100);
+      return{medIncome,medAge,population:totalPop,pctBachelors,pctYoungAdult,pctUnder18,tractCount:data.length};
+    }
+    const tradeArea={
+      mi3:aggRing([...tractsByRing[3]]),
+      mi4:aggRing([...tractsByRing[4]]),
+      mi5:aggRing([...tractsByRing[5]])
+    };
+    // Use 3-mile ring for scoring (tightest trade area), fallback to 5-mile
+    const primary=tradeArea.mi3||tradeArea.mi5||{};
+    const{medIncome=0,medAge=0,population=0,pctBachelors=0,pctYoungAdult=0,pctUnder18:pctHHWithKids=0}=primary;
 
     // Income score (0-10)
     let incomeScore=3;
@@ -1292,7 +1335,7 @@ async function autoScoreRE(propId){
           hotels,offices,entertainment,restaurants,shops,
           schools,gyms,competitors,
           poiCount,parkingCount,poiSource,
-          poiLists,
+          poiLists,tradeArea,
           autoVals:{
             demographics:Math.round(demoScore*10)/10,
             youngAdult:Math.round(youngAdultScore*10)/10,
@@ -1433,8 +1476,51 @@ function rRE(){
       <div class="sdiv" style="margin-top:14px">General Demographics</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
-          <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Census Data · ZIP ${autoData.zip||''}</div>
-          ${[['💰','Median Income','$'+Math.round((autoData.medIncome||0)/1000)+'k'],['👤','Median Age',(autoData.medAge||'—')+' yrs'],['👥','Population',(autoData.population||0).toLocaleString()],['🎓','Bachelor\'s+',(autoData.pctBachelors||0)+'%'],['🧑','Ages 18–34',(autoData.pctYoungAdult||0)+'%'],['👶','Under 18',(autoData.pctHHWithKids||0)+'%']].map(([ic,lb,vl])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">${ic} ${lb}</span><strong style="color:#334155">${vl}</strong></div>`).join('')}
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+            <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Trade Area Demographics</span>
+            <span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Census Tracts</span>
+          </div>
+          ${(()=>{
+            const ta=autoData.tradeArea||{};
+            const r3=ta.mi3,r4=ta.mi4,r5=ta.mi5;
+            const fmt=(v,type)=>{
+              if(v==null||v===0)return'—';
+              if(type==='$')return'$'+Math.round(v/1000)+'k';
+              if(type==='%')return v+'%';
+              if(type==='pop')return v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?Math.round(v/1000)+'k':v;
+              return v;
+            };
+            const rows=[
+              ['💰','Median Income','$','medIncome'],
+              ['👤','Median Age','','medAge'],
+              ['👥','Population','pop','population'],
+              ['🎓',"Bachelor's+",'%','pctBachelors'],
+              ['🧑','Ages 18–34','%','pctYoungAdult'],
+              ['👶','Under 18','%','pctUnder18'],
+            ];
+            const th='<th style="text-align:center;font-size:10px;font-weight:700;color:#475569;padding:4px 6px;border-bottom:2px solid #e2e8f0">';
+            const td=(v,hi)=>`<td style="text-align:center;font-size:12px;font-weight:${hi?'700':'500'};color:${hi?'#0284c7':'#334155'};padding:3px 6px;border-bottom:1px solid #f1f5f9">${v}</td>`;
+            return`<table style="width:100%;border-collapse:collapse">
+              <thead><tr>
+                <${th} style="text-align:left">Metric</th>
+                ${th}3 mi</th>${th}4 mi</th>${th}5 mi</th>
+              </tr></thead>
+              <tbody>
+                ${rows.map(([ic,lb,type,key])=>`<tr>
+                  <td style="font-size:11px;color:#64748b;padding:3px 4px;border-bottom:1px solid #f1f5f9">${ic} ${lb}</td>
+                  ${td(fmt(r3?.[key],type),true)}
+                  ${td(fmt(r4?.[key],type),false)}
+                  ${td(fmt(r5?.[key],type),false)}
+                </tr>`).join('')}
+                <tr style="background:#f0f9ff">
+                  <td style="font-size:10px;color:#94a3b8;padding:3px 4px;font-style:italic">Census tracts</td>
+                  ${td(r3?.tractCount??'—',false)}
+                  ${td(r4?.tractCount??'—',false)}
+                  ${td(r5?.tractCount??'—',false)}
+                </tr>
+              </tbody>
+            </table>`;
+          })()}
         </div>
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
