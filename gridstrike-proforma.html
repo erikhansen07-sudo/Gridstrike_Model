@@ -1124,7 +1124,7 @@ async function autoScoreRE(propId){
 
     // ── Step 4: OSM Overpass — combined query ────────────────────────────────
     const overpassUrl='https://overpass-api.de/api/interpreter';
-    const osmQuery=`[out:json][timeout:20][maxsize:512000];
+    const osmQuery=`[out:json][timeout:20];
 (
   node(around:600,${lat},${lon})[tourism=hotel];
   node(around:600,${lat},${lon})[tourism=motel];
@@ -1141,7 +1141,7 @@ async function autoScoreRE(propId){
   node(around:800,${lat},${lon})[amenity=amusement_arcade];
 ).out tags;`;
 
-    const osmRes=await fetch(overpassUrl,{method:'POST',body:'data='+encodeURIComponent(osmQuery)});
+    const osmRes=await fetch(overpassUrl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(osmQuery)});
     const osmText=await osmRes.text();
     if(osmText.trim().startsWith('<'))throw new Error('Overpass error: '+osmText.slice(0,150));
     const osmJson=JSON.parse(osmText);
