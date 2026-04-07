@@ -1416,39 +1416,49 @@ async function autoScoreRE(propId){
           const mi=m/1609.34;
           return gpN(pl)+' · '+(mi<0.1?'<0.1':mi.toFixed(1))+'mi';
         };
-        // College noise: only keep top-level institutions (parking lots, buildings, fields, dept offices etc. excluded)
-        const COLLEGE_NOISE=/parking lot|parking structure|parking garage|\blot [a-z0-9]\b|field \d|\d+ field|building \d|\d+ building|department|dept\b|office|center|eops|outreach|softball|architecture|dance dept|counseling|student services/i;
-        const COLLEGE_KEEP=/college|university|institut|polytechnic|seminary|conservatory|community college/i;
-        const collegeRes=res[11].filter(pl=>{
-          const n=gpN(pl);
-          return COLLEGE_KEEP.test(n)&&!COLLEGE_NOISE.test(n);
-        });
+        // Dedup helper: tracks seen place IDs, returns only unseen places (in priority order)
+        const makeDedup=()=>{const seen=new Set();return arr=>arr.filter(pl=>{if(!pl.id||seen.has(pl.id))return false;seen.add(pl.id);return true;});};
+        // Restaurant dedup — priority: fast food > coffee > bar > family (most specific wins)
+        const rdp=makeDedup();
+        const restFastFoodRes=rdp(res[4]);
+        const restCoffeeRes=rdp(res[5]);
+        const restBarRes=rdp(res[3]);
+        const restFamilyRes=rdp(res[2]);
+        // Fitness dedup — priority: crossfit > yoga > dance > general gym
+        const fdp=makeDedup();
+        const gymCrossfitRes=fdp(res[14]);
+        const gymYogaRes=fdp(res[13]);
+        const gymDanceRes=fdp(res[15]);
+        const gymFitnessRes=fdp(res[12]);
+        // College noise filter: only top-level institutions
+        const COLLEGE_NOISE=/parking lot|parking structure|parking garage|\blot [a-z0-9]\b|field \d|\d+ field|building \d|\d+ building|department|dept\b|\boffice\b|eops|outreach|softball|architecture|counseling|student services/i;
+        const COLLEGE_KEEP=/college|university|institut|polytechnic|seminary|conservatory/i;
+        const collegeRes=res[11].filter(pl=>{const n=gpN(pl);return COLLEGE_KEEP.test(n)&&!COLLEGE_NOISE.test(n);});
         const hotelRes=res[0].filter(pl=>!HOTEL_NOISE.test(gpN(pl)));
         hotels=hotelRes.length;
         offices=res[1].length;
-        const totalRestaurants=res[2].length+res[3].length+res[4].length+res[5].length;
-        restaurants=totalRestaurants;
+        restaurants=restFamilyRes.length+restFastFoodRes.length+restCoffeeRes.length+restBarRes.length;
         shops=res[6].length;
         schools=res[8].length+res[9].length+res[10].length+collegeRes.length;
-        gyms=res[12].length+res[13].length+res[14].length+res[15].length;
+        gyms=gymFitnessRes.length+gymYogaRes.length+gymCrossfitRes.length+gymDanceRes.length;
         competitors=res[16].length;
         poiLists={
           hotels:hotelRes.map(gpLabel),
           employers:res[1].map(gpLabel),
-          restFamily:res[2].map(gpLabel),
-          restBar:res[3].map(gpLabel),
-          restFastFood:res[4].map(gpLabel),
-          restCoffee:res[5].map(gpLabel),
+          restFamily:restFamilyRes.map(gpLabel),
+          restBar:restBarRes.map(gpLabel),
+          restFastFood:restFastFoodRes.map(gpLabel),
+          restCoffee:restCoffeeRes.map(gpLabel),
           shopRetail:res[6].map(gpLabel),
           grocery:res[7].map(gpLabel),
           schoolElem:res[8].map(gpLabel),
           schoolMiddle:res[9].map(gpLabel),
           schoolHigh:res[10].map(gpLabel),
           schoolCollege:collegeRes.map(gpLabel),
-          gymFitness:res[12].map(gpLabel),
-          gymYoga:res[13].map(gpLabel),
-          gymCrossfit:res[14].map(gpLabel),
-          gymDance:res[15].map(gpLabel),
+          gymFitness:gymFitnessRes.map(gpLabel),
+          gymYoga:gymYogaRes.map(gpLabel),
+          gymCrossfit:gymCrossfitRes.map(gpLabel),
+          gymDance:gymDanceRes.map(gpLabel),
           competitors:res[16].map(gpLabel),
           wellness:res[17].map(gpLabel),
         };
