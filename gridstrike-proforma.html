@@ -1090,7 +1090,8 @@ function rMonthlyCF(){
 // ─── Auto-Scoring Engine ──────────────────────────────────────────────────────
 // Uses: Census Geocoder → Census ACS5 → OSM Overpass (all free, no API key)
 
-const reScoreStatus={};  // propId → 'idle'|'loading'|'done'|'error'
+const reScoreStatus={};   // propId → 'idle'|'loading'|'done'|'error'
+const rePoiExpanded={};  // 'propId-cat' → bool
 
 async function autoScoreRE(propId){
   const p=(S.reProps||[]).find(x=>x.id===propId);
@@ -1183,28 +1184,39 @@ async function autoScoreRE(propId){
       return(d.places||[]);
     }
 
+    let poiLists={hotels:[],schools:[],restaurants:[],shops:[],gyms:[],offices:[]};
     if(gpKey){
       // Use Google Places — accurate, real-world data
       try{
-        const [hotelRes,schoolRes,restRes,shopRes,gymRes] = await Promise.all([
+        const gpName=p=>p.displayName?.text||p.displayName||'Unknown';
+        const [hotelRes,schoolRes,restRes,shopRes,gymRes,officeRes] = await Promise.all([
           gpSearch(['hotel','motel','lodging'], 3218),
           gpSearch(['school','primary_school','secondary_school','university'], 8047, 20),
           gpSearch(['restaurant','cafe','fast_food_restaurant','bar'], 400, 20),
           gpSearch(['store','shopping_mall','supermarket','convenience_store'], 400, 20),
-          gpSearch(['gym','fitness_center'], 1600)
+          gpSearch(['gym','fitness_center'], 1600),
+          gpSearch(['corporate_office','office_space'], 3218)
         ]);
         hotels=hotelRes.length;
         schools=schoolRes.length;
         restaurants=restRes.length;
         shops=shopRes.length;
         gyms=gymRes.length;
-        offices=0; // Places API doesn't have a reliable office type — kept manual
+        offices=officeRes.length;
+        poiLists={
+          hotels:hotelRes.map(gpName),
+          schools:schoolRes.map(gpName),
+          restaurants:restRes.map(gpName),
+          shops:shopRes.map(gpName),
+          gyms:gymRes.map(gpName),
+          offices:officeRes.map(gpName)
+        };
         parkingCount=3; // Default parking — Google doesn't rate parking lots well
         entertainment=0;
         competitors=0;
         poiCount=restaurants+shops;
         ftScore=poiCount>40?10:poiCount>20?8.5:poiCount>10?7:poiCount>4?5.5:poiCount>1?4:3;
-        anchorScore=Math.min(10,hotels*2.0+gyms*0.5);
+        anchorScore=Math.min(10,hotels*2.0+offices*0.5+gyms*0.3);
         parkScore=5; // manual override encouraged
         poiSource='google';
       }catch(e){console.warn('Google Places error, falling back to OSM',e);gpKey&&console.error(e);}
@@ -1264,7 +1276,16 @@ async function autoScoreRE(propId){
           pctBachelors,pctYoungAdult,pctHHWithKids,
           hotels,offices,entertainment,restaurants,shops,
           schools,gyms,competitors,
-          poiCount,parkingCount,poiSource
+          poiCount,parkingCount,poiSource,
+          poiLists,
+          autoVals:{
+            demographics:Math.round(demoScore*10)/10,
+            youngAdult:Math.round(youngAdultScore*10)/10,
+            familyDensity:Math.round(familyScore*10)/10,
+            footTraffic:Math.round(ftScore*10)/10,
+            anchorProximity:Math.round(anchorScore*10)/10,
+            parking:Math.round(parkScore*10)/10
+          }
         }
       };
     });
@@ -1332,24 +1353,31 @@ function rRE(){
       {label:'Parking',            max:5, auto:true, k:'parking',         score:sc.parkScore},
       {label:'Visibility/Signage', max:5, auto:false,k:'visibility',      score:sc.visScore},
     ];
+    const autoVals=(autoData&&autoData.autoVals)||{};
     const dimRow=d=>{
       const pct=Math.round(d.score/d.max*100);
-      const badge=d.auto
+      const curVal=+(p[d.k]||5);
+      const autoVal=autoVals[d.k];
+      const isOverridden=d.k&&autoVal!=null&&Math.abs(curVal-autoVal)>0.05;
+      const accentColor=isOverridden?'#d97706':scoreColor;
+      const badge=!d.k
+        ?`<span style="font-size:8px;background:#d4fce8;color:#00904a;border-radius:3px;padding:1px 4px;font-weight:700;margin-left:4px">AUTO</span>`
+        :isOverridden
+        ?`<span style="font-size:8px;background:#fef3c7;color:#d97706;border-radius:3px;padding:1px 4px;font-weight:700;margin-left:4px">MANUAL</span>`
+        :d.auto
         ?`<span style="font-size:8px;background:#d4fce8;color:#00904a;border-radius:3px;padding:1px 4px;font-weight:700;margin-left:4px">AUTO</span>`
         :`<span style="font-size:8px;background:#fef3c7;color:#d97706;border-radius:3px;padding:1px 4px;font-weight:700;margin-left:4px">MANUAL</span>`;
-      return`<div style="padding:5px 0;border-bottom:1px solid #f8fafc">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${d.k?'3px':'1px'}">
-          <span style="font-size:11px;font-weight:700;color:#475569">${d.label}${badge}</span>
-          <span style="font-size:11px;font-weight:700;color:${scoreColor}">${d.score.toFixed(1)} / ${d.max}pts</span>
-        </div>
-        ${d.k?`<div style="display:flex;align-items:center;gap:5px">
-          <input type="range" min="1" max="10" step="0.1" value="${p[d.k]||5}"
+      return`<div style="padding:4px 0;border-bottom:1px solid #f8fafc">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:11px;font-weight:700;color:#475569;min-width:120px;flex-shrink:0">${d.label}${badge}</span>
+          ${d.k?`<input type="range" min="1" max="10" step="0.1" value="${curVal}"
             oninput="reInp('re-${d.k}-${p.id}',this.value)"
-            style="flex:1;accent-color:#00904a;height:3px">
-          <span style="font-size:10px;color:#64748b;min-width:24px;text-align:right">${(+(p[d.k]||5)).toFixed(1)}</span>
-        </div>`:''}
-        <div style="height:3px;background:#f1f5f9;border-radius:2px;margin-top:2px;overflow:hidden">
-          <div style="height:100%;width:${pct}%;background:${scoreColor};border-radius:2px"></div>
+            style="flex:1;accent-color:${accentColor};height:3px;min-width:60px">`
+            :`<div style="flex:1;height:3px;background:#f1f5f9;border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${accentColor};border-radius:2px"></div></div>`}
+          <span style="font-size:11px;font-weight:700;color:${accentColor};min-width:64px;text-align:right;flex-shrink:0">${d.score.toFixed(1)} / ${d.max}pts</span>
+          ${d.k&&isOverridden?`<button onclick="reResetDim(${p.id},'${d.k}')" title="Reset to auto-scored value"
+            style="border:none;background:#fef3c7;color:#d97706;border-radius:4px;padding:2px 5px;font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0">↺ AUTO</button>`
+            :`<div style="width:44px;flex-shrink:0"></div>`}
         </div>
       </div>`;
     };
@@ -1401,7 +1429,19 @@ function rRE(){
               ?`<span style="font-size:9px;background:#fef3c7;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:700">OpenStreetMap</span>`
               :`<span style="font-size:9px;background:#f1f5f9;color:#94a3b8;border-radius:3px;padding:1px 5px;font-weight:700">No data</span>`}
           </div>
-          ${[['🏨',autoData.poiSource==='google'?'Hotels (2mi)':'Hotels (2mi)',autoData.hotels||0],['🏢','Offices (2mi)',autoData.offices||0],['🍕','Restaurants (400m)',autoData.restaurants||0],['🛍','Shops (400m)',autoData.shops||0],['🏫','Schools (5mi)',autoData.schools||0],['💪','Gyms (1mi)',autoData.gyms||0],['🎮','Competitors (800m)',autoData.competitors||0]].map(([ic,lb,vl])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">${ic} ${lb}</span><strong style="color:#334155">${vl}</strong></div>`).join('')}
+          ${[['🏨','hotels','Hotels (2mi)',autoData.hotels||0],['🏢','offices','Offices (2mi)',autoData.offices||0],['🍕','restaurants','Restaurants (400m)',autoData.restaurants||0],['🛍','shops','Shops (400m)',autoData.shops||0],['🏫','schools','Schools (5mi)',autoData.schools||0],['💪','gyms','Gyms (1mi)',autoData.gyms||0],['🎮','competitors','Competitors (800m)',autoData.competitors||0]].map(([ic,cat,lb,vl])=>{
+            const names=(autoData.poiLists&&autoData.poiLists[cat])||[];
+            const exp=rePoiExpanded[p.id+'-'+cat]&&names.length>0;
+            const hasNames=names.length>0;
+            return`<div style="border-bottom:1px solid #f1f5f9">
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0;cursor:${hasNames?'pointer':'default'}"
+                ${hasNames?`onclick="reTogglePoi(${p.id},'${cat}')"`:''}>
+                <span style="color:#64748b">${ic} ${lb}${hasNames?`<span style="font-size:9px;color:#94a3b8;margin-left:4px">${exp?'▲':'▼'}</span>`:''}</span>
+                <strong style="color:#334155">${vl}</strong>
+              </div>
+              ${exp?`<div style="padding:4px 0 6px 16px">${names.map(n=>`<div style="font-size:11px;color:#475569;padding:1px 0;border-bottom:1px solid #f8fafc">${n}</div>`).join('')}</div>`:''}
+            </div>`;
+          }).join('')}
         </div>
       </div>`:''}
 
@@ -1697,6 +1737,18 @@ function reRemove(id){
 }
 function reToggleCollapse(id){
   S.reProps=(S.reProps||[]).map(p=>p.id===id?{...p,collapsed:!p.collapsed}:p);
+  save();render();
+}
+function reTogglePoi(propId,cat){
+  const k=propId+'-'+cat;
+  rePoiExpanded[k]=!rePoiExpanded[k];
+  render();
+}
+function reResetDim(propId,key){
+  const p=(S.reProps||[]).find(x=>x.id===propId);
+  const av=p&&p._autoScoreData&&p._autoScoreData.autoVals;
+  if(!av||av[key]==null)return;
+  S.reProps=S.reProps.map(x=>x.id===propId?{...x,[key]:av[key]}:x);
   save();render();
 }
 function reSyncRent(propId){
