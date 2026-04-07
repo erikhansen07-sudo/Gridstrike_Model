@@ -311,24 +311,43 @@ const LOGO=`<div style="font-family:'Orbitron',sans-serif;font-weight:900;font-s
 // ─── Real Estate Scoring ──────────────────────────────────────────────────────
 // Total: 100pts — auto-scored except visibility (manual)
 // Rent(15) + Size(10) + Income/Edu(15) + YoungAdult(10) + Family(15) + FootTraffic(15) + Anchor(10) + Parking(5) + Visibility(5)
+function spaceCalc(sqft,baths){
+  sqft=sqft||0;baths=baths||1;
+  const entertain=Math.round(sqft*0.25);
+  const ingress=Math.round(sqft*0.15);
+  const support=Math.round(sqft*0.10);
+  const overhead=entertain+ingress+support;
+  const bathSqft=baths*100;
+  const available=Math.max(0,sqft-overhead-bathSqft);
+  const rooms=Math.floor(available/400);
+  const leftover=available-rooms*400;
+  return{entertain,ingress,support,overhead,bathSqft,available,rooms,leftover};
+}
 function scoreRE(p){
   const totalRentPerSqft=(p.baseRent||0)+(p.cams||0);
-  // Rent efficiency (15pts): ideal <$2.50, painful >$4.50
-  const rentScore=Math.max(0,15-Math.max(0,(totalRentPerSqft-2.00)*6));
+  // Dynamic rent baseline: 10% rent-to-revenue ceiling using projected rooms
+  const sp=spaceCalc(p.sqft,p.bathrooms||1);
+  const projRooms=Math.max(1,sp.rooms);
+  const r=S.rev;
+  const monthlyRevenue=projRooms*r.sessions*r.price*(r.util/100)*365/12;
+  const monthlyRent=totalRentPerSqft*(p.sqft||0);
+  const rentToPct=monthlyRevenue>0?monthlyRent/monthlyRevenue:1;
+  // 15pts at 0%, 0pts at 25%+ rent-to-revenue
+  const rentScore=Math.max(0,Math.min(15,15*(1-rentToPct/0.25)));
+  const rentCeilPsf=monthlyRevenue>0?monthlyRevenue*0.10/(p.sqft||1):0;
   // Size fit (10pts): ideal 2000-3500sqft
   const sqft=p.sqft||0;
   const sizeDiff=sqft<2000?2000-sqft:sqft>3500?sqft-3500:0;
   const sizeScore=Math.max(0,10-sizeDiff/100);
-  // Auto-scored demos (from Census) — each 0-10 slider OR auto-filled
-  const incomeEduScore=(p.demographics||5)/10*15;   // 15pts: income + education
-  const youngAdultScore=(p.youngAdult||5)/10*10;     // 10pts: % 18-34 in area
-  const familyScore=(p.familyDensity||5)/10*15;      // 15pts: schools + % w/ kids
-  const ftScore=(p.footTraffic||5)/10*15;            // 15pts: nearby POI density
-  const anchorScore=(p.anchorProximity||5)/10*10;    // 10pts: hotels, entertainment
-  const parkScore=(p.parking||5)/10*5;               // 5pts
-  const visScore=(p.visibility||5)/10*5;             // 5pts (manual only)
+  const incomeEduScore=(p.demographics||5)/10*15;
+  const youngAdultScore=(p.youngAdult||5)/10*10;
+  const familyScore=(p.familyDensity||5)/10*15;
+  const ftScore=(p.footTraffic||5)/10*15;
+  const anchorScore=(p.anchorProximity||5)/10*10;
+  const parkScore=(p.parking||5)/10*5;
+  const visScore=(p.visibility||5)/10*5;
   const total=rentScore+sizeScore+incomeEduScore+youngAdultScore+familyScore+ftScore+anchorScore+parkScore+visScore;
-  return{total:Math.round(Math.min(100,total)),rentScore,sizeScore,incomeEduScore,youngAdultScore,familyScore,ftScore,anchorScore,parkScore,visScore};
+  return{total:Math.round(Math.min(100,total)),rentScore,sizeScore,incomeEduScore,youngAdultScore,familyScore,ftScore,anchorScore,parkScore,visScore,rentToPct,rentCeilPsf,projRooms,monthlyRevenue};
 }
 function reGrade(score){
   if(score>=85)return{g:'A',c:'#15803d',bg:'#f0fdf4'};
@@ -1123,12 +1142,12 @@ async function autoScoreRE(propId){
     const youngAdultScore=Math.min(10,pctYoungAdult/2.5);
 
     // ── Step 4: OSM Overpass — optional, fails gracefully ───────────────────
-    let hotels=0,restaurants=0,shops=0,parkingCount=0,schools=0,gyms=0,competitors=0,poiCount=0,entertainment=0;
+    let hotels=0,restaurants=0,shops=0,parkingCount=0,schools=0,gyms=0,competitors=0,offices=0,poiCount=0,entertainment=0;
     let ftScore=5, anchorScore=5, parkScore=5;
     let osmOk=false;
     try{
       const overpassServers=['https://overpass.kumi.systems/api/interpreter','https://overpass-api.de/api/interpreter'];
-      const osmQuery=`[out:json][timeout:25];\n(\n  node(around:600,${lat},${lon})[tourism=hotel];\n  node(around:600,${lat},${lon})[tourism=motel];\n  node(around:400,${lat},${lon})[amenity=restaurant];\n  node(around:400,${lat},${lon})[amenity=cafe];\n  node(around:400,${lat},${lon})[amenity=fast_food];\n  node(around:400,${lat},${lon})[shop];\n  node(around:400,${lat},${lon})[amenity=parking];\n  node(around:3200,${lat},${lon})[amenity=school];\n  node(around:800,${lat},${lon})[leisure=fitness_centre];\n  node(around:800,${lat},${lon})[leisure=escape_game];\n  node(around:800,${lat},${lon})[amenity=amusement_arcade];\n);\nout tags;`;
+      const osmQuery=`[out:json][timeout:25];\n(\n  node(around:3218,${lat},${lon})[tourism=hotel];\n  node(around:3218,${lat},${lon})[tourism=motel];\n  node(around:3218,${lat},${lon})[amenity=hotel];\n  node(around:3218,${lat},${lon})[building=hotel];\n  node(around:3218,${lat},${lon})[office];\n  way(around:3218,${lat},${lon})[office];\n  node(around:400,${lat},${lon})[amenity=restaurant];\n  node(around:400,${lat},${lon})[amenity=cafe];\n  node(around:400,${lat},${lon})[amenity=fast_food];\n  node(around:400,${lat},${lon})[shop];\n  node(around:400,${lat},${lon})[amenity=parking];\n  node(around:3200,${lat},${lon})[amenity=school];\n  node(around:800,${lat},${lon})[leisure=fitness_centre];\n  node(around:800,${lat},${lon})[leisure=escape_game];\n  node(around:800,${lat},${lon})[amenity=amusement_arcade];\n);\nout tags;`;
       let osmText='';
       for(const url of overpassServers){
         try{
@@ -1139,7 +1158,7 @@ async function autoScoreRE(propId){
       }
       if(osmText&&!osmText.trim().startsWith('<')){
         const els=JSON.parse(osmText).elements||[];
-        hotels=els.filter(e=>e.tags&&(e.tags.tourism==='hotel'||e.tags.tourism==='motel')).length;
+        hotels=els.filter(e=>e.tags&&(e.tags.tourism==='hotel'||e.tags.tourism==='motel'||e.tags.amenity==='hotel'||e.tags.building==='hotel')).length;
         entertainment=els.filter(e=>e.tags&&(e.tags.leisure||e.tags.amenity==='cinema')).length;
         restaurants=els.filter(e=>e.tags&&['restaurant','cafe','fast_food'].includes(e.tags.amenity)).length;
         shops=els.filter(e=>e.tags&&e.tags.shop).length;
@@ -1147,9 +1166,10 @@ async function autoScoreRE(propId){
         schools=els.filter(e=>e.tags&&e.tags.amenity==='school').length;
         gyms=els.filter(e=>e.tags&&e.tags.leisure==='fitness_centre').length;
         competitors=els.filter(e=>e.tags&&(e.tags.leisure==='escape_game'||e.tags.amenity==='amusement_arcade')).length;
+        offices=els.filter(e=>e.tags&&e.tags.office).length;
         poiCount=restaurants+shops;
         ftScore=poiCount>100?10:poiCount>60?8.5:poiCount>30?7:poiCount>15?5.5:poiCount>5?4:3;
-        anchorScore=Math.min(10,hotels*2.5+entertainment*1.5);
+        anchorScore=Math.min(10,hotels*1.5+entertainment*1.0+offices*0.3);
         parkScore=parkingCount>5?10:parkingCount>2?8:parkingCount>0?6:3;
         osmOk=true;
       }
@@ -1174,7 +1194,7 @@ async function autoScoreRE(propId){
           lat,lon,displayAddr,
           medIncome,medAge,population,
           pctBachelors,pctYoungAdult,pctHHWithKids,
-          hotels,entertainment,restaurants,shops,
+          hotels,offices,entertainment,restaurants,shops,
           schools,gyms,competitors,
           poiCount,parkingCount
         }
@@ -1223,57 +1243,105 @@ function rRE(){
     const gr=reGrade(sc.total);
     const monthly=(p.baseRent+(p.cams||0))*p.sqft;
     const linked=p.linkedUnitId?S.units.find(u=>u.id===p.linkedUnitId):null;
-
-    // Score color gradient
     const scoreColor=sc.total>=70?'#00904a':sc.total>=55?'#d97706':'#dc2626';
+    const status=reScoreStatus[p.id]||'idle';
+    const isLoading=status==='loading';
+    const isError=status.startsWith('error');
+    const autoData=p._autoScoreData;
+    const sp=spaceCalc(p.sqft,p.bathrooms||1);
+    const collapsed=p.collapsed||false;
+    const baths=p.bathrooms||1;
+
+    // Unified scoring dimensions
+    const dims=[
+      {label:'Rent Efficiency',    max:15,auto:true, k:null,              score:sc.rentScore},
+      {label:'Size Fit',           max:10,auto:true, k:null,              score:sc.sizeScore},
+      {label:'Income & Education', max:15,auto:true, k:'demographics',    score:sc.incomeEduScore},
+      {label:'Young Adults 18–34', max:10,auto:true, k:'youngAdult',      score:sc.youngAdultScore},
+      {label:'Family Density',     max:15,auto:true, k:'familyDensity',   score:sc.familyScore},
+      {label:'Foot Traffic',       max:15,auto:true, k:'footTraffic',     score:sc.ftScore},
+      {label:'Anchor Proximity',   max:10,auto:true, k:'anchorProximity', score:sc.anchorScore},
+      {label:'Parking',            max:5, auto:true, k:'parking',         score:sc.parkScore},
+      {label:'Visibility/Signage', max:5, auto:false,k:'visibility',      score:sc.visScore},
+    ];
+    const dimRow=d=>{
+      const pct=Math.round(d.score/d.max*100);
+      const badge=d.auto
+        ?`<span style="font-size:8px;background:#d4fce8;color:#00904a;border-radius:3px;padding:1px 4px;font-weight:700;margin-left:4px">AUTO</span>`
+        :`<span style="font-size:8px;background:#fef3c7;color:#d97706;border-radius:3px;padding:1px 4px;font-weight:700;margin-left:4px">MANUAL</span>`;
+      return`<div style="padding:5px 0;border-bottom:1px solid #f8fafc">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${d.k?'3px':'1px'}">
+          <span style="font-size:11px;font-weight:700;color:#475569">${d.label}${badge}</span>
+          <span style="font-size:11px;font-weight:700;color:${scoreColor}">${d.score.toFixed(1)} / ${d.max}pts</span>
+        </div>
+        ${d.k?`<div style="display:flex;align-items:center;gap:5px">
+          <input type="range" min="1" max="10" step="0.1" value="${p[d.k]||5}"
+            oninput="reInp('re-${d.k}-${p.id}',this.value)"
+            style="flex:1;accent-color:#00904a;height:3px">
+          <span style="font-size:10px;color:#64748b;min-width:24px;text-align:right">${(+(p[d.k]||5)).toFixed(1)}</span>
+        </div>`:''}
+        <div style="height:3px;background:#f1f5f9;border-radius:2px;margin-top:2px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${scoreColor};border-radius:2px"></div>
+        </div>
+      </div>`;
+    };
+
+    const btnStyle=v=>`border:1px solid ${baths===v?'#00904a':'#e2e8f0'};background:${baths===v?'#d4fce8':'#fff'};color:${baths===v?'#00904a':'#64748b'};border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer`;
 
     return`<div class="card" style="margin-bottom:16px;border-left:4px solid ${gr.c}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:12px;flex-wrap:wrap">
-        <div style="flex:1;min-width:200px">
+      <!-- HEADER -->
+      <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:180px">
           <input type="text" id="re-addr-${p.id}" value="${esc(p.address)}"
-            placeholder="Address"
+            placeholder="Enter address (include city + state + ZIP)..."
             onchange="reInp('re-addr-${p.id}',this.value)"
             style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 10px;color:#0f172a;font-size:14px;font-weight:700;outline:none">
         </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
-          <!-- Score badge -->
-          <div style="text-align:center;background:${gr.bg};border:2px solid ${gr.c};border-radius:10px;padding:8px 16px;min-width:80px">
-            <div style="font-size:28px;font-weight:900;color:${gr.c};line-height:1">${sc.total}</div>
-            <div style="font-size:10px;font-weight:700;color:${gr.c};letter-spacing:1px">SCORE · ${gr.g}</div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:6px;align-items:center">
-            ${(()=>{
-              const status=reScoreStatus[p.id]||'idle';
-              const isLoading=status==='loading';
-              const isDone=status==='done';
-              const isError=status.startsWith('error');
-              const autoData=p._autoScoreData;
-              return`<button class="btn" style="font-size:11px;padding:6px 12px;background:${isLoading?'#94a3b8':'#00904a'}"
-                onclick="autoScoreRE(${p.id})" ${isLoading?'disabled':''}>
-                ${isLoading?'⟳ Scoring…':'⚡ Auto-Score'}
-              </button>
-              ${isDone&&autoData?`<div style="font-size:9px;color:#64748b;text-align:center;max-width:110px">
-                📍 ${esc((autoData.geocodedAddress||'').split(',')[0])}<br>
-                👥 $${Math.round(autoData.medIncome/1000)}k income · Age ${autoData.medAge}<br>
-                🏨 ${autoData.hotels} hotels · 🏪 ${autoData.poiCount} POIs
-              </div>`:''}
-              ${isError?`<div style="font-size:9px;color:#dc2626;max-width:110px">${esc(status.replace('error:',''))}</div>`:''}`;
-            })()}
-          </div>
-          ${props.length>1?`<button class="btn-del" onclick="reRemove(${p.id})">Remove</button>`:''}
+        <div style="text-align:center;background:${gr.bg};border:2px solid ${gr.c};border-radius:10px;padding:6px 14px;min-width:72px;flex-shrink:0">
+          <div style="font-size:26px;font-weight:900;color:${gr.c};line-height:1">${sc.total}</div>
+          <div style="font-size:9px;font-weight:700;color:${gr.c};letter-spacing:1px">SCORE · ${gr.g}</div>
         </div>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:center;flex-shrink:0">
+          <button class="btn" style="font-size:11px;padding:6px 12px;background:${isLoading?'#94a3b8':'#00904a'}"
+            onclick="autoScoreRE(${p.id})" ${isLoading?'disabled':''}>
+            ${isLoading?'⟳ Scoring…':'⚡ Auto-Score'}
+          </button>
+          ${isError?`<div style="font-size:9px;color:#dc2626;max-width:110px;text-align:center">${esc(status.replace('error:',''))}</div>`:''}
+        </div>
+        <button onclick="reToggleCollapse(${p.id})"
+          style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:13px;color:#64748b;flex-shrink:0">
+          ${collapsed?'▶ Expand':'▼ Collapse'}
+        </button>
+        ${props.length>1?`<button class="btn-del" onclick="reRemove(${p.id})" style="flex-shrink:0">✕</button>`:''}
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        <!-- Left: Property Details -->
+      ${collapsed?'':`
+      <!-- GENERAL DEMOGRAPHICS -->
+      ${autoData?`
+      <div class="sdiv" style="margin-top:14px">General Demographics</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+          <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Census Data · ZIP ${autoData.zip||''}</div>
+          ${[['💰','Median Income','$'+Math.round((autoData.medIncome||0)/1000)+'k'],['👤','Median Age',(autoData.medAge||'—')+' yrs'],['👥','Population',(autoData.population||0).toLocaleString()],['🎓','Bachelor\'s+',(autoData.pctBachelors||0)+'%'],['🧑','Ages 18–34',(autoData.pctYoungAdult||0)+'%'],['👶','Under 18',(autoData.pctHHWithKids||0)+'%']].map(([ic,lb,vl])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">${ic} ${lb}</span><strong style="color:#334155">${vl}</strong></div>`).join('')}
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+          <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Nearby POIs</div>
+          ${[['🏨','Hotels (2mi)',autoData.hotels||0],['🏢','Offices (2mi)',autoData.offices||0],['🍕','Restaurants (400m)',autoData.restaurants||0],['🛍','Shops (400m)',autoData.shops||0],['🏫','Schools (2mi)',autoData.schools||0],['💪','Gyms (800m)',autoData.gyms||0],['🎮','Competitors (800m)',autoData.competitors||0]].map(([ic,lb,vl])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">${ic} ${lb}</span><strong style="color:#334155">${vl}</strong></div>`).join('')}
+        </div>
+      </div>`:''}
+
+      <!-- MAIN GRID -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:${autoData?'4px':'16px'}">
+
+        <!-- LEFT: Property Details + Space Table + Link + Rent Summary -->
         <div>
           <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0">Property Details</div>
-          <div class="g3" style="margin-bottom:12px">
+          <div class="g3" style="margin-bottom:10px">
             ${ni2(`re-sqft-${p.id}`,'Sq Footage',p.sqft,{step:50,min:500})}
             ${ni2(`re-br-${p.id}`,'Base Rent ($/sqft)',p.baseRent,{step:0.25,min:0})}
             ${ni2(`re-cams-${p.id}`,'CAMS/NNN ($/sqft)',p.cams||0,{step:0.25,min:0})}
           </div>
-          <div class="g2" style="margin-bottom:12px">
+          <div class="g2" style="margin-bottom:10px">
             <div>
               <label class="label">Zoning Type</label>
               <select id="re-zone-${p.id}" onchange="reInp('re-zone-${p.id}',this.value)">
@@ -1283,83 +1351,78 @@ function rRE(){
             ${ni2(`re-term-${p.id}`,'Lease Term (yrs)',p.leaseTerm||5,{step:1,min:1})}
           </div>
 
+          <!-- Space Allocation Table -->
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Space Allocation</span>
+              <div style="display:flex;gap:4px;align-items:center">
+                <span style="font-size:10px;color:#64748b">Baths:</span>
+                <button onclick="reInp('re-baths-${p.id}',1)" style="${btnStyle(1)}">1</button>
+                <button onclick="reInp('re-baths-${p.id}',2)" style="${btnStyle(2)}">2</button>
+              </div>
+            </div>
+            ${[['Total Space','',p.sqft?.toLocaleString()||0,false],['Entertainment / Lobby','25%',sp.entertain.toLocaleString(),true],['Ingress / Egress','15%',sp.ingress.toLocaleString(),true],['Support / Back-of-house','10%',sp.support.toLocaleString(),true],[`Bathrooms (${baths}×100sqft)`,'',sp.bathSqft.toLocaleString(),true]].map(([lb,pc,vl,ind])=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #e2e8f0;color:${ind?'#94a3b8':'#334155'}"><span style="padding-left:${ind?'8px':'0'}">${ind?'− ':' '}${lb}${pc?` <span style="color:#cbd5e1">(${pc})</span>`:''}  </span><span style="font-weight:600">${vl} sqft</span></div>`).join('')}
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:2px solid #00904a;font-weight:700;margin-top:2px">
+              <span style="color:#334155">Available for Rooms</span><span style="color:#00904a">${sp.available.toLocaleString()} sqft</span>
+            </div>
+            <div style="font-size:10px;color:#94a3b8;padding:3px 0">÷ 400 sqft / room (25′ × 16′)</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">
+              <span style="font-size:12px;font-weight:700;color:#334155">Projected Rooms</span>
+              <span style="font-size:22px;font-weight:900;color:#00904a">${sp.rooms}</span>
+            </div>
+            ${sp.leftover>0?`<div style="font-size:10px;color:#94a3b8;text-align:right">Buffer: ${sp.leftover} sqft</div>`:''}
+          </div>
+
           <!-- Link to Location -->
-          <div class="lsec" style="margin-top:8px">
+          <div class="lsec">
             <div class="lsec-title">Link to Location</div>
-            <select id="re-link-${p.id}" onchange="reInp('re-link-${p.id}',this.value)"
-              style="width:100%;margin-bottom:8px">
+            <select id="re-link-${p.id}" onchange="reInp('re-link-${p.id}',this.value)" style="width:100%;margin-bottom:8px">
               <option value="">— Not linked —</option>
               ${S.units.map(u=>`<option value="${u.id}"${p.linkedUnitId===u.id?' selected':''}>${esc(u.name)}</option>`).join('')}
             </select>
-            ${linked?`
-            <div style="font-size:11px;color:#334155;margin-top:6px">
-              <span style="color:#64748b">Current rent in model:</span>
-              <strong style="color:#00904a">${$(linked.rent)}/mo</strong>
-              <span style="color:#94a3b8;margin:0 6px">→</span>
+            ${linked?`<div style="font-size:11px;color:#334155;margin-top:4px">
+              <span style="color:#64748b">Model rent:</span> <strong style="color:#00904a">${$(linked.rent)}/mo</strong>
+              <span style="color:#94a3b8;margin:0 5px">→</span>
               <span style="color:#64748b">This property:</span>
               <strong style="color:${monthly>linked.rent*1.1?'#dc2626':monthly<linked.rent*0.9?'#00904a':'#334155'}">${$(monthly)}/mo</strong>
-              <button class="btn-sm" style="margin-left:8px" onclick="reSyncRent(${p.id})">Sync Rent →</button>
-            </div>`:`<div style="font-size:11px;color:#94a3b8">Link to a location to sync rent into the financial model.</div>`}
+              <button class="btn-sm" style="margin-left:6px" onclick="reSyncRent(${p.id})">Sync Rent →</button>
+            </div>`:`<div style="font-size:11px;color:#94a3b8">Link a location to sync rent into the model.</div>`}
           </div>
 
-          <!-- Monthly summary -->
-          <div style="margin-top:12px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
-            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
-              <span style="color:#64748b">Total $/sqft/mo</span>
-              <strong style="color:#334155">${((p.baseRent||0)+(p.cams||0)).toFixed(2)}</strong>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
-              <span style="color:#64748b">Monthly Rent</span>
-              <strong style="color:#334155">${$(monthly)}</strong>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;border-top:1px solid #e2e8f0;padding-top:6px;margin-top:4px">
-              <span style="color:#334155">Annual Rent</span>
-              <strong style="color:#00904a">${$(monthly*12)}</strong>
+          <!-- Rent + Revenue Summary -->
+          <div style="margin-top:10px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
+            ${[['Total $/sqft/mo','#334155',((p.baseRent||0)+(p.cams||0)).toFixed(2)],['Monthly Rent','#334155',$(monthly)],[`Est. Revenue (${sc.projRooms} rooms)`,'#334155',$(Math.round(sc.monthlyRevenue))],['10% Rent Ceiling','#64748b',$(Math.round(sc.monthlyRevenue*0.10))+'/mo · $'+sc.rentCeilPsf.toFixed(2)+'/sqft']].map(([lb,cl,vl])=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:#64748b">${lb}</span><strong style="color:${cl}">${vl}</strong></div>`).join('')}
+            <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;border-top:1px solid #e2e8f0;padding-top:6px;margin-top:4px">
+              <span style="color:#334155">Rent-to-Revenue</span>
+              <strong style="color:${sc.rentToPct>0.20?'#dc2626':sc.rentToPct>0.12?'#d97706':'#00904a'}">${Math.round(sc.rentToPct*100)}%${sc.rentToPct>0.20?' ⚠':''}</strong>
             </div>
           </div>
         </div>
 
-        <!-- Right: Scoring -->
+        <!-- RIGHT: Unified Score Analysis -->
         <div>
-          <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0">Location Scores <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(rate 1–10)</span></div>
-          <div class="g2" style="margin-bottom:12px">
-            ${['demographics','youngAdult','familyDensity','footTraffic','parking','visibility','anchorProximity'].map(k=>{
-              const labels={demographics:'Income & Education',youngAdult:'Young Adults (18–34)',familyDensity:'Family Density',footTraffic:'Foot Traffic',parking:'Parking',visibility:'Visibility / Signage',anchorProximity:'Anchor Proximity'};
-              const autoKeys=['demographics','youngAdult','familyDensity','footTraffic','parking','anchorProximity'];
-              const isAuto=autoKeys.includes(k);
-              return`<div>
-                <label class="label">${labels[k]}${isAuto?` <span style="font-size:8px;background:#d4fce8;color:#00904a;border-radius:3px;padding:1px 5px;font-weight:700">AUTO</span>`:' <span style="font-size:8px;background:#fef3c7;color:#d97706;border-radius:3px;padding:1px 5px;font-weight:700">MANUAL</span>'}</label>
-                <input type="range" min="1" max="10" value="${p[k]||5}"
-                  oninput="reInp('re-${k}-${p.id}',this.value);this.nextElementSibling.textContent=this.value"
-                  style="width:100%;accent-color:#00904a">
-                <div style="text-align:right;font-size:12px;font-weight:700;color:#00904a">${p[k]||5}/10</div>
-              </div>`;
-            }).join('')}
+          <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0">Score Analysis
+            <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:#94a3b8"> — drag sliders to override</span>
           </div>
-
-          <!-- Score breakdown -->
-          <div class="lsec" style="margin-top:4px">
-            <div class="lsec-title">Score Breakdown</div>
-            ${scoreBar('Rent Efficiency',sc.rentScore,15,scoreColor)}
-            ${scoreBar('Size Fit',sc.sizeScore,10,scoreColor)}
-            ${scoreBar('Income & Education',sc.incomeEduScore,15,scoreColor)}
-            ${scoreBar('Young Adults (18–34)',sc.youngAdultScore,10,scoreColor)}
-            ${scoreBar('Family Density',sc.familyScore,15,scoreColor)}
-            ${scoreBar('Foot Traffic',sc.ftScore,15,scoreColor)}
-            ${scoreBar('Anchor Proximity',sc.anchorScore,10,scoreColor)}
-            ${scoreBar('Parking',sc.parkScore,5,scoreColor)}
-            ${scoreBar('Visibility (manual)',sc.visScore,5,scoreColor)}
+          ${dims.map(dimRow).join('')}
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;margin-top:4px;border-top:2px solid #e2e8f0">
+            <span style="font-size:12px;font-weight:700;color:#334155">TOTAL</span>
+            <span style="font-size:20px;font-weight:900;color:${scoreColor}">${sc.total} / 100 · ${gr.g}</span>
+          </div>
+          <div style="height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden">
+            <div style="height:100%;width:${sc.total}%;background:${scoreColor};border-radius:4px;transition:width 0.3s"></div>
           </div>
         </div>
       </div>
 
       <!-- Notes -->
-      <div style="margin-top:12px">
+      <div style="margin-top:14px">
         <label class="label">Notes</label>
         <textarea id="re-notes-${p.id}" rows="2"
           onchange="reInp('re-notes-${p.id}',this.value)"
           style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 10px;color:#0f172a;font-size:13px;outline:none;resize:vertical">${esc(p.notes||'')}</textarea>
       </div>
+      `}
     </div>`;
   }).join('');
 
@@ -1548,12 +1611,17 @@ function reAdd(){
   if(!S.reProps)S.reProps=[];
   const id=reNextId++;
   S.reProps.push({id,address:'',sqft:2250,baseRent:2.75,cams:1.00,leaseTerm:5,linkedUnitId:null,
-    demographics:5,footTraffic:5,parking:5,visibility:5,anchorProximity:5,zoning:'Industrial Flex',notes:''});
+    demographics:5,footTraffic:5,parking:5,visibility:5,anchorProximity:5,youngAdult:5,familyDensity:5,
+    bathrooms:1,collapsed:false,zoning:'Industrial Flex',notes:''});
   render();save();
 }
 function reRemove(id){
   S.reProps=(S.reProps||[]).filter(p=>p.id!==id);
   render();save();
+}
+function reToggleCollapse(id){
+  S.reProps=(S.reProps||[]).map(p=>p.id===id?{...p,collapsed:!p.collapsed}:p);
+  save();render();
 }
 function reSyncRent(propId){
   const p=(S.reProps||[]).find(x=>x.id===propId);
@@ -1565,14 +1633,15 @@ function reSyncRent(propId){
 function reInp(id,val){
   if(!S.reProps)S.reProps=[];
   const n=parseFloat(val);
-  const m=id.match(/^re-(addr|sqft|br|cams|term|zone|notes|link|demographics|footTraffic|parking|visibility|anchorProximity)-(\d+)$/);
+  const m=id.match(/^re-(addr|sqft|br|cams|term|zone|notes|link|demographics|footTraffic|parking|visibility|anchorProximity|youngAdult|familyDensity|baths)-(\d+)$/);
   if(!m)return;
   const [,field,pidStr]=m;
   const pid=parseInt(pidStr);
   const keyMap={addr:'address',sqft:'sqft',br:'baseRent',cams:'cams',term:'leaseTerm',
     zone:'zoning',notes:'notes',link:'linkedUnitId',
     demographics:'demographics',footTraffic:'footTraffic',parking:'parking',
-    visibility:'visibility',anchorProximity:'anchorProximity'};
+    visibility:'visibility',anchorProximity:'anchorProximity',
+    youngAdult:'youngAdult',familyDensity:'familyDensity',baths:'bathrooms'};
   const key=keyMap[field];
   if(!key)return;
   S.reProps=S.reProps.map(p=>{
