@@ -1122,27 +1122,27 @@ async function autoScoreRE(propId){
     // Young adult score (0-10): >25% = excellent
     const youngAdultScore=Math.min(10,pctYoungAdult/2.5);
 
-    // ── Step 4: OSM Overpass — single combined query ─────────────────────────
-    const R5MI=8047; // 5 miles in meters
-    const overpassUrl='https://overpass-api.de/api/interpreter';
-    const osmQuery=`[out:json][timeout:25];
+    // ── Step 4: OSM Overpass — combined query ────────────────────────────────
+    const overpassUrl='https://overpass.kumi.systems/api/interpreter';
+    const osmQuery=`[out:json][timeout:30];
 (
-  node(around:R600,${lat},${lon})[tourism~"^(hotel|motel)$"];
-  node(around:R600,${lat},${lon})[leisure~"^(fitness_centre|bowling_alley|escape_game|amusement_arcade|sports_centre|stadium)$"];
-  node(around:R600,${lat},${lon})[amenity~"^(cinema|theatre|nightclub)$"];
-  node(around:R400,${lat},${lon})[amenity~"^(restaurant|cafe|fast_food|bar|pub)$"];
-  node(around:R400,${lat},${lon})[shop];
-  node(around:R400,${lat},${lon})[amenity=parking];
-  way(around:R400,${lat},${lon})[amenity=parking];
-  node(around:${R5MI},${lat},${lon})[amenity=school]["school:level"~"^(elementary|middle|primary|secondary)$"];
-  node(around:${R5MI},${lat},${lon})[amenity=school][name~"[Ee]lementary|[Mm]iddle|[Jj]unior"];
-  way(around:${R5MI},${lat},${lon})[amenity=school]["school:level"~"^(elementary|middle|primary|secondary)$"];
-  way(around:${R5MI},${lat},${lon})[amenity=school][name~"[Ee]lementary|[Mm]iddle|[Jj]unior"];
-  node(around:R800,${lat},${lon})[leisure~"^(fitness_centre|gym)$"];
-  node(around:R800,${lat},${lon})[amenity~"^(game_room|amusement_arcade)$"];
-  node(around:R800,${lat},${lon})[leisure="escape_game"];
-).out body;`
-    .replace(/R600/g,'600').replace(/R400/g,'400').replace(/R800/g,'800');
+  node(around:600,${lat},${lon})[tourism=hotel];
+  node(around:600,${lat},${lon})[tourism=motel];
+  node(around:600,${lat},${lon})[amenity=cinema];
+  node(around:600,${lat},${lon})[amenity=theatre];
+  node(around:400,${lat},${lon})[amenity=restaurant];
+  node(around:400,${lat},${lon})[amenity=cafe];
+  node(around:400,${lat},${lon})[amenity=fast_food];
+  node(around:400,${lat},${lon})[amenity=bar];
+  node(around:400,${lat},${lon})[shop];
+  node(around:400,${lat},${lon})[amenity=parking];
+  way(around:400,${lat},${lon})[amenity=parking];
+  node(around:8047,${lat},${lon})[amenity=school];
+  way(around:8047,${lat},${lon})[amenity=school];
+  node(around:800,${lat},${lon})[leisure=fitness_centre];
+  node(around:800,${lat},${lon})[leisure=escape_game];
+  node(around:800,${lat},${lon})[amenity=amusement_arcade];
+).out tags;`;
 
     const osmRes=await fetch(overpassUrl,{method:'POST',body:'data='+encodeURIComponent(osmQuery)});
     const osmText=await osmRes.text();
