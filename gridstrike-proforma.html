@@ -1147,7 +1147,7 @@ async function autoScoreRE(propId){
     let osmOk=false;
     try{
       const overpassServers=['https://overpass.kumi.systems/api/interpreter','https://overpass-api.de/api/interpreter'];
-      const osmQuery=`[out:json][timeout:25];\n(\n  node(around:3218,${lat},${lon})[tourism=hotel];\n  node(around:3218,${lat},${lon})[tourism=motel];\n  node(around:3218,${lat},${lon})[amenity=hotel];\n  node(around:3218,${lat},${lon})[building=hotel];\n  node(around:3218,${lat},${lon})[office];\n  way(around:3218,${lat},${lon})[office];\n  node(around:400,${lat},${lon})[amenity=restaurant];\n  node(around:400,${lat},${lon})[amenity=cafe];\n  node(around:400,${lat},${lon})[amenity=fast_food];\n  node(around:400,${lat},${lon})[shop];\n  node(around:400,${lat},${lon})[amenity=parking];\n  node(around:3200,${lat},${lon})[amenity=school];\n  node(around:800,${lat},${lon})[leisure=fitness_centre];\n  node(around:800,${lat},${lon})[leisure=escape_game];\n  node(around:800,${lat},${lon})[amenity=amusement_arcade];\n);\nout tags;`;
+      const osmQuery=`[out:json][timeout:35];\n(\n  node(around:3218,${lat},${lon})[tourism=hotel];\n  way(around:3218,${lat},${lon})[tourism=hotel];\n  relation(around:3218,${lat},${lon})[tourism=hotel];\n  node(around:3218,${lat},${lon})[tourism=motel];\n  way(around:3218,${lat},${lon})[tourism=motel];\n  node(around:3218,${lat},${lon})[amenity=hotel];\n  way(around:3218,${lat},${lon})[amenity=hotel];\n  node(around:3218,${lat},${lon})[building=hotel];\n  way(around:3218,${lat},${lon})[building=hotel];\n  node(around:3218,${lat},${lon})[office];\n  way(around:3218,${lat},${lon})[office];\n  relation(around:3218,${lat},${lon})[office];\n  way(around:3218,${lat},${lon})[building=office];\n  way(around:3218,${lat},${lon})[landuse=office];\n  way(around:3218,${lat},${lon})[landuse=commercial];\n  node(around:400,${lat},${lon})[amenity=restaurant];\n  node(around:400,${lat},${lon})[amenity=cafe];\n  node(around:400,${lat},${lon})[amenity=fast_food];\n  node(around:400,${lat},${lon})[shop];\n  node(around:400,${lat},${lon})[amenity=parking];\n  way(around:400,${lat},${lon})[amenity=parking];\n  node(around:8047,${lat},${lon})[amenity=school];\n  way(around:8047,${lat},${lon})[amenity=school];\n  node(around:800,${lat},${lon})[leisure=fitness_centre];\n  node(around:800,${lat},${lon})[leisure=escape_game];\n  node(around:800,${lat},${lon})[amenity=amusement_arcade];\n);\nout tags;`;
       let osmText='';
       for(const url of overpassServers){
         try{
@@ -1166,7 +1166,7 @@ async function autoScoreRE(propId){
         schools=els.filter(e=>e.tags&&e.tags.amenity==='school').length;
         gyms=els.filter(e=>e.tags&&e.tags.leisure==='fitness_centre').length;
         competitors=els.filter(e=>e.tags&&(e.tags.leisure==='escape_game'||e.tags.amenity==='amusement_arcade')).length;
-        offices=els.filter(e=>e.tags&&e.tags.office).length;
+        offices=els.filter(e=>e.tags&&(e.tags.office||e.tags.building==='office'||e.tags.landuse==='office'||e.tags.landuse==='commercial')).length;
         poiCount=restaurants+shops;
         ftScore=poiCount>100?10:poiCount>60?8.5:poiCount>30?7:poiCount>15?5.5:poiCount>5?4:3;
         anchorScore=Math.min(10,hotels*1.5+entertainment*1.0+offices*0.3);
