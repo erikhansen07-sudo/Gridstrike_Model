@@ -175,6 +175,8 @@ const DEFAULTS={
 function migrateState(s){
   if(!s.comp){s.comp=Array.from({length:20},(_,i)=>({devFee:s.units[i]?.devFee||35000,revShare:s.units[i]?.revShare||10,equity:0}));}
   if(!s.reProps)s.reProps=[];
+  // Heal duplicate reProps IDs (caused by reNextId scoping bug)
+  {const seen=new Set();let nxt=1;s.reProps=s.reProps.map(p=>{if(seen.has(p.id)){while(seen.has(nxt))nxt++;p={...p,id:nxt++};}seen.add(p.id);return p;});}
   if(!s.distributions)s.distributions=[0,0,0,0,0];
   if(!s.ramp)s.ramp=[.50,.70,.88,1.00,1.00];
   if(!s.capexMatrix)s.capexMatrix=DEFCAPEX.map(r=>[...r]);
