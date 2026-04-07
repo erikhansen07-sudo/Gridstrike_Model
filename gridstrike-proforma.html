@@ -2080,16 +2080,21 @@ function rRE(){
     const estRev=Math.round(sc.monthlyRevenue);
     const totalOpex=p.reOpexAmts?Object.values(p.reOpexAmts).reduce((s,v)=>s+(v||0),0):0;
     const totalCapex=p.reCapexAmts?Object.values(p.reCapexAmts).reduce((s,v)=>s+(v||0),0):0;
+    const rent=Math.round(((p.baseRent||0)+(p.cams||0))*(p.sqft||0));
+    const estEbitda=estRev-totalOpex-rent;
+    const cocMonths=totalCapex>0&&estEbitda>0?(totalCapex/estEbitda).toFixed(1)+' mo':'—';
     return`<tr style="background:#fff">
       <td><span style="background:${isActive?'#dcfce7':'#f1f5f9'};color:${isActive?'#16a34a':'#64748b'};border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700">${isActive?'ACTIVE':'EVAL'}</span></td>
       <td style="font-weight:600;color:#334155">${esc(p.friendlyName||'—')}</td>
+      <td><span style="background:${gr.bg};color:${gr.c};border-radius:6px;padding:2px 8px;font-weight:700;font-size:11px">${sc.total} ${gr.g}</span></td>
       <td style="color:#64748b;font-size:11px">${esc(p.address||'—')}</td>
       <td>${p.sqft?.toLocaleString()||'—'}</td>
       <td>${sp2.rooms}</td>
       <td style="color:${CY};font-weight:600">${estRev>0?$(estRev):'—'}</td>
       <td style="color:#334155">${totalOpex>0?$(totalOpex)+'/mo':'—'}</td>
+      <td style="color:${estEbitda>0?'#00904a':estEbitda<0?'#dc2626':'#334155'};font-weight:600">${estRev>0?$(estEbitda):'—'}</td>
       <td style="color:#334155">${totalCapex>0?$(totalCapex):'—'}</td>
-      <td><span style="background:${gr.bg};color:${gr.c};border-radius:6px;padding:2px 8px;font-weight:700;font-size:11px">${sc.total} ${gr.g}</span></td>
+      <td style="color:#64748b;font-weight:600">${cocMonths}</td>
     </tr>`;
   }).join('');
 
@@ -2105,7 +2110,7 @@ function rRE(){
     <div class="card" style="margin-bottom:16px">
       <div class="card-title">All Locations</div>
       <div style="overflow-x:auto"><table>
-        <thead><tr>${['Status','Friendly Name','Address','Sq Ft','Rooms','Est Rev/mo','Est OPEX/mo','Est CAPEX','Score'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+        <thead><tr>${['Status','Friendly Name','Score','Address','Sq Ft','Rooms','Est Rev/mo','Est OPEX/mo','Est EBITDA','Est CAPEX','CoC (mo)'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
         <tbody>${allLocRows}</tbody>
       </table></div>
     </div>
