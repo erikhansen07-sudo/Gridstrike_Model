@@ -53,7 +53,7 @@
 const RAMP=[.50,.70,.88,1.00,1.00];
 const CY='#00904a',PK='#e11d48',GR='#16a34a',AM='#d97706',PU='#7c3aed';
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
-const CX_ROWS=['Arch & Engineering','Permitting Fees','General Contracting','Squarena Tiles','Brand Finishes','Exterior Signage','Opening Inventory','Grand Opening Marketing'];
+const CX_ROWS=['Arch & Engineering','Permitting Fees','General Contracting','Gridstrike Tiles','Brand Finishes','Exterior Signage','Opening Inventory','Grand Opening Marketing'];
 // DEFCAPEX[rowIdx][colIdx] where colIdx 0=2rooms … 4=6rooms
 const DEFCAPEX=[[12000,14000,17000,20000,23000],[3500,4000,5000,6000,7000],[48000,58000,70000,82000,95000],[50000,75000,100000,125000,150000],[15000,18000,21000,24000,27000],[5000,5500,6000,6500,7000],[8000,9000,10000,11000,12000],[5000,6000,7000,8000,9000]];
 const OX_ROWS=['Rent','Supplies','Labor','Marketing','Misc'];
@@ -139,7 +139,7 @@ const DEFAULTS={
      demographics:7,footTraffic:5,parking:7,visibility:5,anchorProximity:7,zoning:'Industrial Flex',notes:'Near Ayres Hotel. Business park — low walk-in. Negotiate CAMS.'}
   ],
   units:[
-    {id:1,name:'Location 1',    om:1,oy:2026,rooms:2,capex:150000,rent:8438,mCogs:2500,mLabor:9250,mMktg:1500,mMisc:1500},
+    {id:1,name:'Location 1',    om:1,oy:2026,rooms:2,capex:150000,capexItems:DEFCAPEX.map(r=>r[0]),rent:8438,mCogs:2500,mLabor:9250,mMktg:1500,mMisc:1500},
     
   ]
 };
@@ -155,7 +155,11 @@ function migrateState(s){
   if(!s.equityTiers)s.equityTiers=DEFEQTIERS.map(t=>({...t}));
   if(!s.devFeeTiers)s.devFeeTiers=DEFDFTIERS.map(t=>({...t}));
   while(s.comp.length<20)s.comp.push({devFee:35000,revShare:10,equity:0});
-  s.units=s.units.map(u=>u.curve?u:{...u,curve:'flat'});
+  s.units=s.units.map(u=>{
+    const u2=u.curve?u:{...u,curve:'flat'};
+    if(!u2.capexItems)u2.capexItems=capexItemsForRooms(u2.rooms);
+    return u2;
+  });
   return s;
 }
 
@@ -182,6 +186,11 @@ function storeDevFee(storeNum){
   const tiers=S.devFeeTiers||DEFDFTIERS;
   for(const tier of tiers){if(storeNum<=tier.t)return tier.f;}
   return tiers[tiers.length-1].f;
+}
+function capexItemsForRooms(rooms){
+  const mx=S.capexMatrix||DEFCAPEX;
+  const col=Math.max(0,Math.min(4,rooms-2));
+  return mx.map(row=>row[col]||0);
 }
 function capexForRooms(rooms){
   const mx=S.capexMatrix||DEFCAPEX;
@@ -362,14 +371,56 @@ function rLoc(){
         ${ni(`ur-${u.id}`,'Rooms',u.rooms,{step:1,min:1,max:6})}
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-        <div>
-          <label class="label">Total CAPEX <span style="font-weight:400;color:#94a3b8">(from calculator)</span></label>
-          ${ro($(u.capex))}
+      <!-- CAPEX Breakdown -->
+      <div style="margin-bottom:12px">
+        <div class="lsec-title" style="margin-bottom:8px">CAPEX Breakdown <span style="font-weight:400;text-transform:none;color:#94a3b8;letter-spacing:0">(edit per location · pulls from Default CAPEX Assumptions)</span></div>
+        <table style="width:100%;font-size:12px;margin-bottom:6px">
+          ${CX_ROWS.map((label,ri)=>{
+            const items=u.capexItems||capexItemsForRooms(u.rooms);
+            const val=items[ri]||0;
+            return`<tr style="border-bottom:1px solid #f1f5f9">
+              <td style="padding:5px 0;color:#64748b;width:55%">${label}</td>
+              <td style="padding:5px 0;text-align:right">
+                <div class="iw" style="display:inline-block;width:120px">
+                  <span class="pre">$</span>
+                  <input type="text" inputmode="decimal" id="ucxi-${u.id}-${ri}"
+                    value="${fmtN(val)}" class="hp"
+                    onfocus="niFocus(this)" onblur="niBlur(this)"
+                    onchange="inp('ucxi-${u.id}-${ri}',this.value.replace(/,/g,''))"
+                    style="width:120px;font-size:12px;padding:3px 6px 3px 20px">
+                </div>
+              </td>
+            </tr>`;
+          }).join('')}
+        </table>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#eff6ff;border-radius:6px;font-size:13px">
+          <span style="font-weight:600;color:#334155">Total CAPEX</span>
+          <strong style="color:${CY}">${$(u.capex)}</strong>
         </div>
-        <div>
-          <label class="label">Total Monthly OPEX <span style="font-weight:400;color:#94a3b8">(from calculator · ${$(totalOpex*12)}/yr)</span></label>
-          ${ro($(totalOpex)+'/mo')}
+      </div>
+
+      <!-- OPEX Breakdown -->
+      <div style="margin-bottom:12px">
+        <div class="lsec-title" style="margin-bottom:8px">Monthly OPEX Breakdown <span style="font-weight:400;text-transform:none;color:#94a3b8;letter-spacing:0">(edit per location · annual: ${$(totalOpex*12)})</span></div>
+        <table style="width:100%;font-size:12px;margin-bottom:6px">
+          ${[['Rent','urt',u.rent],['Supplies','uco',u.mCogs],['Labor','ula',u.mLabor],['Marketing','umk',u.mMktg],['Misc / Admin','umi',u.mMisc]].map(([label,fld,val])=>`
+            <tr style="border-bottom:1px solid #f1f5f9">
+              <td style="padding:5px 0;color:#64748b;width:55%">${label}</td>
+              <td style="padding:5px 0;text-align:right">
+                <div class="iw" style="display:inline-block;width:120px">
+                  <span class="pre">$</span>
+                  <input type="text" inputmode="decimal" id="u${fld}-${u.id}"
+                    value="${fmtN(val)}" class="hp"
+                    onfocus="niFocus(this)" onblur="niBlur(this)"
+                    onchange="inp('u${fld}-${u.id}',this.value.replace(/,/g,''))"
+                    style="width:120px;font-size:12px;padding:3px 6px 3px 20px">
+                </div>
+              </td>
+            </tr>`).join('')}
+        </table>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#f0fdf4;border-radius:6px;font-size:13px">
+          <span style="font-weight:600;color:#334155">Total Monthly OPEX</span>
+          <strong style="color:${GR}">${$(totalOpex)}/mo <span style="font-weight:400;color:#94a3b8;font-size:11px">(${$(totalOpex*12)}/yr)</span></strong>
         </div>
       </div>
 
@@ -474,7 +525,7 @@ function rSetup(){
     </div>
 
     <div class="card">
-      <div class="card-title">CAPEX Calculator Assumptions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(auto-fills CAPEX when a location's room count is set)</span></div>
+      <div class="card-title">Default CAPEX Assumptions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(applied when a new location is created or rooms are changed)</span></div>
       <div style="overflow-x:auto">
         <table>
           <thead><tr>
@@ -505,7 +556,7 @@ function rSetup(){
       </div>
     </div>
     <div class="card">
-      <div class="card-title">OPEX Calculator Assumptions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(monthly costs — auto-fills when a location's room count is set)</span></div>
+      <div class="card-title">Default OPEX Assumptions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(monthly costs — editable per-location in the Locations tab)</span></div>
       <div style="overflow-x:auto">
         <table>
           <thead><tr>
@@ -992,6 +1043,157 @@ function rMonthlyCF(){
 }
 
 
+
+// ─── Auto-Scoring Engine ──────────────────────────────────────────────────────
+// Uses: Census Geocoder → Census ACS5 → OSM Overpass (all free, no API key)
+
+const reScoreStatus={};  // propId → 'idle'|'loading'|'done'|'error'
+
+async function autoScoreRE(propId){
+  const p=(S.reProps||[]).find(x=>x.id===propId);
+  if(!p||!p.address){alert('Enter an address first.');return;}
+  reScoreStatus[propId]='loading';render();
+
+  try{
+    // ── Step 1: Geocode via Census Geocoder ──────────────────────────────────
+    const geoUrl=`https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress?address=${encodeURIComponent(p.address)}&benchmark=Public_AR_Current&vintage=Current_Current&format=json`;
+    const geoRes=await fetch(geoUrl);
+    const geoJson=await geoRes.json();
+    const matches=geoJson?.result?.addressMatches;
+    if(!matches||!matches.length)throw new Error('Address not found by Census geocoder.');
+    const match=matches[0];
+    const lat=parseFloat(match.coordinates.y);
+    const lon=parseFloat(match.coordinates.x);
+    const tract=match.geographies['Census Tracts'][0];
+    const stFips=tract.STATE;
+    const coFips=tract.COUNTY;
+    const trFips=tract.TRACT;
+
+    // ── Step 2: Census ACS5 demographics ─────────────────────────────────────
+    // B19013_001E = median HH income
+    // B01002_001E = median age
+    // B01003_001E = total population
+    // B25001_001E = housing units (density proxy)
+    const censusUrl=`https://api.census.gov/data/2023/acs/acs5?get=B19013_001E,B01002_001E,B01003_001E&for=tract:${trFips}&in=state:${stFips}%20county:${coFips}`;
+    const censusRes=await fetch(censusUrl);
+    const censusJson=await censusRes.json();
+    const censusRow=censusJson[1];  // row 0 = headers
+    const medIncome=parseInt(censusRow[0])||0;
+    const medAge=parseFloat(censusRow[1])||30;
+    const population=parseInt(censusRow[2])||0;
+
+    // Demographics score (0-10):
+    // Income: <40k=3, 40-60k=5, 60-80k=7, 80-100k=8.5, >100k=10
+    let incomeScore=3;
+    if(medIncome>100000)incomeScore=10;
+    else if(medIncome>80000)incomeScore=8.5;
+    else if(medIncome>60000)incomeScore=7;
+    else if(medIncome>40000)incomeScore=5;
+    // Age: ideal 22-38 for gaming entertainment
+    const ageDiff=Math.abs(medAge-30);
+    const ageScore=Math.max(0,10-ageDiff*0.4);
+    const demoScore=Math.round((incomeScore*0.6+ageScore*0.4)*10)/10;
+
+    // ── Step 3: OSM Overpass — nearby POIs ───────────────────────────────────
+    // Query radius 600m for anchor venues, 400m for foot traffic / parking
+    const overpassUrl='https://overpass-api.de/api/interpreter';
+    const overpassQuery=`[out:json][timeout:12];
+(
+  node(around:600,${lat},${lon})[tourism=hotel];
+  node(around:600,${lat},${lon})[tourism=motel];
+  node(around:500,${lat},${lon})[leisure~"fitness_centre|bowling_alley|escape_game|amusement_arcade|sports_centre"];
+  node(around:500,${lat},${lon})[amenity~"cinema|theatre|nightclub"];
+  node(around:400,${lat},${lon})[amenity~"restaurant|cafe|fast_food|bar"];
+  node(around:400,${lat},${lon})[shop];
+  node(around:400,${lat},${lon})[amenity=parking];
+  way(around:400,${lat},${lon})[amenity=parking];
+);
+out count;`;
+    const osmRes=await fetch(overpassUrl,{method:'POST',body:'data='+encodeURIComponent(overpassQuery)});
+    const osmJson=await osmRes.json();
+
+    // Re-query with tags to separate categories
+    const overpassQuery2=`[out:json][timeout:15];
+(
+  node(around:600,${lat},${lon})[tourism~"hotel|motel"];
+  node(around:500,${lat},${lon})[leisure~"fitness_centre|bowling_alley|escape_game|amusement_arcade|sports_centre"];
+  node(around:500,${lat},${lon})[amenity~"cinema|theatre|nightclub"];
+);
+out body;`;
+    const osmRes2=await fetch(overpassUrl,{method:'POST',body:'data='+encodeURIComponent(overpassQuery2)});
+    const osmJson2=await osmRes2.json();
+    const anchorEls=osmJson2.elements||[];
+    const hotels=anchorEls.filter(e=>e.tags&&(e.tags.tourism==='hotel'||e.tags.tourism==='motel')).length;
+    const entertainment=anchorEls.filter(e=>e.tags&&(e.tags.leisure||e.tags.amenity)).length;
+
+    const overpassQuery3=`[out:json][timeout:12];
+(
+  node(around:400,${lat},${lon})[amenity~"restaurant|cafe|fast_food|bar|shop"];
+  node(around:400,${lat},${lon})[shop];
+  node(around:400,${lat},${lon})[amenity=parking];
+  way(around:400,${lat},${lon})[amenity=parking];
+);
+out count;`;
+    const osmRes3=await fetch(overpassUrl,{method:'POST',body:'data='+encodeURIComponent(overpassQuery3)});
+    const osmJson3=await osmRes3.json();
+    const totalPOIs=(osmJson3.elements||[]).reduce((s,e)=>s+(e.tags&&e.tags.total?parseInt(e.tags.total):1),0);
+
+    // Better: just count elements
+    const overpassQuery4=`[out:json][timeout:15];
+(
+  node(around:400,${lat},${lon})[amenity];
+  node(around:400,${lat},${lon})[shop];
+  node(around:300,${lat},${lon})[amenity=parking];
+  way(around:300,${lat},${lon})[amenity=parking];
+);
+out body;`;
+    const osmRes4=await fetch(overpassUrl,{method:'POST',body:'data='+encodeURIComponent(overpassQuery4)});
+    const osmJson4=await osmRes4.json();
+    const els4=osmJson4.elements||[];
+    const poiCount=els4.filter(e=>e.tags&&(e.tags.amenity||e.tags.shop)).length;
+    const parkingCount=els4.filter(e=>e.tags&&e.tags.amenity==='parking').length;
+
+    // Foot traffic score (0-10): based on nearby POI density
+    let ftScore=3;
+    if(poiCount>100)ftScore=10;
+    else if(poiCount>60)ftScore=8.5;
+    else if(poiCount>30)ftScore=7;
+    else if(poiCount>15)ftScore=5.5;
+    else if(poiCount>5)ftScore=4;
+
+    // Anchor proximity score (0-10)
+    let anchorScore=Math.min(10, hotels*2.5 + entertainment*1.5);
+
+    // Parking score (0-10)
+    let parkScore=Math.min(10, parkingCount>5?10:parkingCount>2?8:parkingCount>0?6:3);
+
+    // ── Step 4: Update property scores ───────────────────────────────────────
+    S.reProps=S.reProps.map(prop=>{
+      if(prop.id!==propId)return prop;
+      return{...prop,
+        demographics:Math.round(demoScore*10)/10,
+        footTraffic:Math.round(ftScore*10)/10,
+        anchorProximity:Math.round(anchorScore*10)/10,
+        parking:Math.round(parkScore*10)/10,
+        _autoScoreData:{
+          lat,lon,
+          medIncome,medAge,population,
+          hotels,entertainment,poiCount,parkingCount,
+          geocodedAddress:match.matchedAddress
+        }
+      };
+    });
+
+    reScoreStatus[propId]='done';
+    save();render();
+
+  }catch(err){
+    console.error('Auto-score error:',err);
+    reScoreStatus[propId]='error:'+err.message;
+    render();
+  }
+}
+
 // ─── Tab: Real Estate Analysis ───────────────────────────────────────────────
 function rRE(){
   const props=S.reProps||[];
@@ -1041,6 +1243,25 @@ function rRE(){
           <div style="text-align:center;background:${gr.bg};border:2px solid ${gr.c};border-radius:10px;padding:8px 16px;min-width:80px">
             <div style="font-size:28px;font-weight:900;color:${gr.c};line-height:1">${sc.total}</div>
             <div style="font-size:10px;font-weight:700;color:${gr.c};letter-spacing:1px">SCORE · ${gr.g}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;align-items:center">
+            ${(()=>{
+              const status=reScoreStatus[p.id]||'idle';
+              const isLoading=status==='loading';
+              const isDone=status==='done';
+              const isError=status.startsWith('error');
+              const autoData=p._autoScoreData;
+              return`<button class="btn" style="font-size:11px;padding:6px 12px;background:${isLoading?'#94a3b8':'#00904a'}"
+                onclick="autoScoreRE(${p.id})" ${isLoading?'disabled':''}>
+                ${isLoading?'⟳ Scoring…':'⚡ Auto-Score'}
+              </button>
+              ${isDone&&autoData?`<div style="font-size:9px;color:#64748b;text-align:center;max-width:110px">
+                📍 ${esc(autoData.geocodedAddress.split(',')[0])}<br>
+                👥 $${Math.round(autoData.medIncome/1000)}k income · Age ${autoData.medAge}<br>
+                🏨 ${autoData.hotels} hotels · 🏪 ${autoData.poiCount} POIs
+              </div>`:''}
+              ${isError?`<div style="font-size:9px;color:#dc2626;max-width:110px">${esc(status.replace('error:',''))}</div>`:''}`;
+            })()}
           </div>
           ${props.length>1?`<button class="btn-del" onclick="reRemove(${p.id})">Remove</button>`:''}
         </div>
@@ -1282,6 +1503,18 @@ function inp(id,val){
       if(!S.distributions)S.distributions=[0,0,0,0,0];
       S.distributions[parseInt(dm[1])]=isNaN(n)?0:n;
     }
+    // per-location capex item: ucxi-{unitId}-{rowIdx}
+    const ucxim=id.match(/^ucxi-(\d+)-(\d+)$/);
+    if(ucxim){
+      const uid=parseInt(ucxim[1]),ri=parseInt(ucxim[2]);
+      S.units=S.units.map(u=>{
+        if(u.id!==uid)return u;
+        const items=[...(u.capexItems||capexItemsForRooms(u.rooms))];
+        items[ri]=isNaN(n)?0:n;
+        return{...u,capexItems:items,capex:items.reduce((s,v)=>s+v,0)};
+      });
+      render();save();return;
+    }
     const retm=id.match(/^ret-(\d+)$/);
     if(retm){
       if(!S.retentionRates)S.retentionRates=[10,10,10,10,10];
@@ -1299,7 +1532,8 @@ function inp(id,val){
         if(key==='name')return{...u,[key]:String(val)};
         if(key==='rooms'){
           const newRooms=Math.max(1,Math.min(6,parseInt(val)||1));
-          return{...u,rooms:newRooms,capex:capexForRooms(newRooms),...opexForRooms(newRooms)};
+          const items=capexItemsForRooms(newRooms);
+          return{...u,rooms:newRooms,capex:items.reduce((s,v)=>s+v,0),capexItems:items,...opexForRooms(newRooms)};
         }
         return{...u,[key]:isNaN(n)?0:n};
       });
@@ -1353,7 +1587,8 @@ function setSel(id){S.sel=id;render();}
 function addUnit(){
   const id=nid++;
   const defOpex=opexForRooms(2);
-  S.units.push({id,name:`Location ${id}`,om:1,oy:2027,rooms:2,capex:capexForRooms(2),...defOpex,devFee:35000,revShare:10});
+  const defCapexItems=capexItemsForRooms(2);
+  S.units.push({id,name:`Location ${id}`,om:1,oy:2027,rooms:2,capex:capexForRooms(2),capexItems:defCapexItems,...defOpex,devFee:35000,revShare:10});
   render();ghSave();
 }
 function delUnit(id){
