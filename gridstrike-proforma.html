@@ -1086,7 +1086,9 @@ async function autoScoreRE(propId){
     const censusVars='B19013_001E,B01002_001E,B01003_001E,B15003_022E,B15003_023E,B15003_024E,B15003_025E,B15003_001E,B01001_003E,B01001_004E,B01001_005E,B01001_006E,B01001_027E,B01001_028E,B01001_029E,B01001_030E,B01001_007E,B01001_008E,B01001_009E,B01001_010E,B01001_031E,B01001_032E,B01001_033E,B01001_034E';
     const censusUrl=`https://api.census.gov/data/2023/acs/acs5?get=${censusVars}&for=zip%20code%20tabulation%20area:${zip}`;
     const censusRes=await fetch(censusUrl);
-    const censusJson=await censusRes.json();
+    const censusText=await censusRes.text();
+    if(censusText.trim().startsWith('<'))throw new Error('Census API error: '+censusText.slice(0,120));
+    const censusJson=JSON.parse(censusText);
     const ch=censusJson[0]; const cd=censusJson[1];
     const g=k=>parseInt(cd[ch.indexOf(k)])||0;
     const gf=k=>parseFloat(cd[ch.indexOf(k)])||0;
@@ -1143,7 +1145,9 @@ async function autoScoreRE(propId){
     .replace(/R600/g,'600').replace(/R400/g,'400').replace(/R800/g,'800');
 
     const osmRes=await fetch(overpassUrl,{method:'POST',body:'data='+encodeURIComponent(osmQuery)});
-    const osmJson=await osmRes.json();
+    const osmText=await osmRes.text();
+    if(osmText.trim().startsWith('<'))throw new Error('Overpass error: '+osmText.slice(0,150));
+    const osmJson=JSON.parse(osmText);
     const els=osmJson.elements||[];
 
     // Categorize
