@@ -1122,60 +1122,42 @@ async function autoScoreRE(propId){
     // Young adult score (0-10): >25% = excellent
     const youngAdultScore=Math.min(10,pctYoungAdult/2.5);
 
-    // ── Step 4: OSM Overpass — combined query ────────────────────────────────
-    const overpassUrl='https://overpass.kumi.systems/api/interpreter';
-    const osmQuery=`[out:json][timeout:25];
-(
-  node(around:600,${lat},${lon})[tourism=hotel];
-  node(around:600,${lat},${lon})[tourism=motel];
-  node(around:600,${lat},${lon})[amenity=cinema];
-  node(around:400,${lat},${lon})[amenity=restaurant];
-  node(around:400,${lat},${lon})[amenity=cafe];
-  node(around:400,${lat},${lon})[amenity=fast_food];
-  node(around:400,${lat},${lon})[shop];
-  node(around:400,${lat},${lon})[amenity=parking];
-  way(around:400,${lat},${lon})[amenity=parking];
-  node(around:3200,${lat},${lon})[amenity=school];
-  node(around:800,${lat},${lon})[leisure=fitness_centre];
-  node(around:800,${lat},${lon})[leisure=escape_game];
-  node(around:800,${lat},${lon})[amenity=amusement_arcade];
-);
-out tags;`;
+    // ── Step 4: OSM Overpass — optional, fails gracefully ───────────────────
+    let hotels=0,restaurants=0,shops=0,parkingCount=0,schools=0,gyms=0,competitors=0,poiCount=0,entertainment=0;
+    let ftScore=5, anchorScore=5, parkScore=5;
+    let osmOk=false;
+    try{
+      const overpassServers=['https://overpass.kumi.systems/api/interpreter','https://overpass-api.de/api/interpreter'];
+      const osmQuery=`[out:json][timeout:25];\n(\n  node(around:600,${lat},${lon})[tourism=hotel];\n  node(around:600,${lat},${lon})[tourism=motel];\n  node(around:400,${lat},${lon})[amenity=restaurant];\n  node(around:400,${lat},${lon})[amenity=cafe];\n  node(around:400,${lat},${lon})[amenity=fast_food];\n  node(around:400,${lat},${lon})[shop];\n  node(around:400,${lat},${lon})[amenity=parking];\n  node(around:3200,${lat},${lon})[amenity=school];\n  node(around:800,${lat},${lon})[leisure=fitness_centre];\n  node(around:800,${lat},${lon})[leisure=escape_game];\n  node(around:800,${lat},${lon})[amenity=amusement_arcade];\n);\nout tags;`;
+      let osmText='';
+      for(const url of overpassServers){
+        try{
+          const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(osmQuery)});
+          osmText=await r.text();
+          if(!osmText.trim().startsWith('<'))break;
+        }catch(e){osmText='';}
+      }
+      if(osmText&&!osmText.trim().startsWith('<')){
+        const els=JSON.parse(osmText).elements||[];
+        hotels=els.filter(e=>e.tags&&(e.tags.tourism==='hotel'||e.tags.tourism==='motel')).length;
+        entertainment=els.filter(e=>e.tags&&(e.tags.leisure||e.tags.amenity==='cinema')).length;
+        restaurants=els.filter(e=>e.tags&&['restaurant','cafe','fast_food'].includes(e.tags.amenity)).length;
+        shops=els.filter(e=>e.tags&&e.tags.shop).length;
+        parkingCount=els.filter(e=>e.tags&&e.tags.amenity==='parking').length;
+        schools=els.filter(e=>e.tags&&e.tags.amenity==='school').length;
+        gyms=els.filter(e=>e.tags&&e.tags.leisure==='fitness_centre').length;
+        competitors=els.filter(e=>e.tags&&(e.tags.leisure==='escape_game'||e.tags.amenity==='amusement_arcade')).length;
+        poiCount=restaurants+shops;
+        ftScore=poiCount>100?10:poiCount>60?8.5:poiCount>30?7:poiCount>15?5.5:poiCount>5?4:3;
+        anchorScore=Math.min(10,hotels*2.5+entertainment*1.5);
+        parkScore=parkingCount>5?10:parkingCount>2?8:parkingCount>0?6:3;
+        osmOk=true;
+      }
+    }catch(e){console.warn('Overpass unavailable, using defaults',e);}
 
-    const osmRes=await fetch(overpassUrl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(osmQuery)});
-    const osmText=await osmRes.text();
-    if(osmText.trim().startsWith('<'))throw new Error('Overpass error: '+osmText.slice(0,150));
-    const osmJson=JSON.parse(osmText);
-    const els=osmJson.elements||[];
-
-    // Categorize
-    const hotels=els.filter(e=>e.tags&&(e.tags.tourism==='hotel'||e.tags.tourism==='motel')).length;
-    const entertainment=els.filter(e=>e.tags&&(e.tags.leisure||e.tags.amenity==='cinema'||e.tags.amenity==='theatre')).length;
-    const restaurants=els.filter(e=>e.tags&&['restaurant','cafe','fast_food','bar','pub'].includes(e.tags.amenity)).length;
-    const shops=els.filter(e=>e.tags&&e.tags.shop).length;
-    const parkingCount=els.filter(e=>e.tags&&e.tags.amenity==='parking').length;
-    const schools=els.filter(e=>e.tags&&e.tags.amenity==='school').length;
-    const gyms=els.filter(e=>e.tags&&(e.tags.leisure==='fitness_centre'||e.tags.amenity==='gym'||e.tags.leisure==='gym')).length;
-    const competitors=els.filter(e=>e.tags&&(e.tags.leisure==='escape_game'||e.tags.amenity==='amusement_arcade'||e.tags.leisure==='amusement_arcade')).length;
-    const poiCount=restaurants+shops;
-
-    // Foot traffic score (0-10)
-    let ftScore=3;
-    if(poiCount>100)ftScore=10;
-    else if(poiCount>60)ftScore=8.5;
-    else if(poiCount>30)ftScore=7;
-    else if(poiCount>15)ftScore=5.5;
-    else if(poiCount>5)ftScore=4;
-
-    // Anchor proximity score (0-10)
-    const anchorScore=Math.min(10, hotels*2.5 + entertainment*1.5);
-
-    // Parking score (0-10)
-    const parkScore=Math.min(10, parkingCount>5?10:parkingCount>2?8:parkingCount>0?6:3);
-
-    // Family density score (0-10): schools + % households with kids
-    const schoolScore=Math.min(6, schools*0.5);           // up to 6pts from schools
-    const kidsScore=Math.min(4, pctHHWithKids/8);          // up to 4pts from % w/kids
+    // Family density score (0-10): schools (OSM) + % under-18 (Census)
+    const schoolScore=Math.min(6, schools*0.5);
+    const kidsScore=Math.min(4, pctHHWithKids/8);
     const familyScore=Math.round((schoolScore+kidsScore)*10)/10;
 
     // ── Step 5: Update property scores ───────────────────────────────────────
