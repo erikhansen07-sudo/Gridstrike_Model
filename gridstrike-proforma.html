@@ -1713,82 +1713,82 @@ function rRE(){
         ${['details','scoring','capex'].map(t=>{
           const lbl={details:'📋 Location Details',scoring:'🎯 Scoring',capex:'🏗 CAPEX'}[t];
           const active=(rePropTab[p.id]||'details')===t;
-          return\`<button onclick="reSetTab(\${p.id},'${t}')"
-            style="border:none;background:none;padding:8px 16px;font-size:12px;font-weight:\${active?700:500};
-            color:\${active?'#00904a':'#64748b'};border-bottom:\${active?'2px solid #00904a':'2px solid transparent'};
-            margin-bottom:-2px;cursor:pointer;transition:color .15s">\${lbl}</button>\`;
+          return`<button onclick="reSetTab(${p.id},'${t}')"
+            style="border:none;background:none;padding:8px 16px;font-size:12px;font-weight:${active?700:500};
+            color:${active?'#00904a':'#64748b'};border-bottom:${active?'2px solid #00904a':'2px solid transparent'};
+            margin-bottom:-2px;cursor:pointer;transition:color .15s">${lbl}</button>`;
         }).join('')}
       </div>
 
       <!-- TAB CONTENT: DETAILS -->
-      \${(rePropTab[p.id]||'details')==='details'?\`<div style="margin-top:12px">
+      ${(rePropTab[p.id]||'details')==='details'?`<div style="margin-top:12px">
           <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0">Property Details</div>
           <div class="g3" style="margin-bottom:10px">
-            \${ni2(\`re-sqft-\${p.id}\`,'Sq Footage',p.sqft,{step:50,min:500})}
-            \${ni2(\`re-br-\${p.id}\`,'Base Rent (\$/sqft)',p.baseRent,{pre:'$',step:0.25,min:0})}
-            \${ni2(\`re-cams-\${p.id}\`,'CAMS/NNN (\$/sqft)',p.cams||0,{pre:'$',step:0.25,min:0})}
+            ${ni2(`re-sqft-${p.id}`,'Sq Footage',p.sqft,{step:50,min:500})}
+            ${ni2(`re-br-${p.id}`,'Base Rent (\$/sqft)',p.baseRent,{pre:'$',step:0.25,min:0})}
+            ${ni2(`re-cams-${p.id}`,'CAMS/NNN (\$/sqft)',p.cams||0,{pre:'$',step:0.25,min:0})}
           </div>
           <div class="g2" style="margin-bottom:10px">
             <div>
               <label class="label">Zoning Type</label>
-              <select id="re-zone-\${p.id}" onchange="reInp('re-zone-\${p.id}',this.value)">
-                \${['Industrial Flex','Retail Strip','Mixed Use','Standalone','Mall/Center','Other'].map(z=>\`<option value="\${z}"\${p.zoning===z?' selected':''}>​\${z}</option>\`).join('')}
+              <select id="re-zone-${p.id}" onchange="reInp('re-zone-${p.id}',this.value)">
+                ${['Industrial Flex','Retail Strip','Mixed Use','Standalone','Mall/Center','Other'].map(z=>`<option value="${z}"${p.zoning===z?' selected':''}>​${z}</option>`).join('')}
               </select>
             </div>
-            \${ni2(\`re-term-\${p.id}\`,'Lease Term (yrs)',p.leaseTerm||5,{step:1,min:1})}
+            ${ni2(`re-term-${p.id}`,'Lease Term (yrs)',p.leaseTerm||5,{step:1,min:1})}
           </div>
           <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Space Allocation</span>
               <div style="display:flex;gap:4px;align-items:center">
                 <span style="font-size:10px;color:#64748b">Baths:</span>
-                <button onclick="reInp('re-baths-\${p.id}',1)" style="\${btnStyle(1)}">1</button>
-                <button onclick="reInp('re-baths-\${p.id}',2)" style="\${btnStyle(2)}">2</button>
+                <button onclick="reInp('re-baths-${p.id}',1)" style="${btnStyle(1)}">1</button>
+                <button onclick="reInp('re-baths-${p.id}',2)" style="${btnStyle(2)}">2</button>
               </div>
             </div>
-            \${[['Total Space','',p.sqft?.toLocaleString()||0,false],['Entertainment / Lobby','25%',sp.entertain.toLocaleString(),true],['Ingress / Egress','15%',sp.ingress.toLocaleString(),true],['Support / Back-of-house','10%',sp.support.toLocaleString(),true],[\`Bathrooms (\${baths}×100sqft)\`,'',sp.bathSqft.toLocaleString(),true]].map(([lb,pc,vl,ind])=>\`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #e2e8f0;color:\${ind?'#94a3b8':'#334155'}"><span style="padding-left:\${ind?'8px':'0'}">\${ind?'− ':' '}\${lb}\${pc?\` <span style="color:#cbd5e1">(\${pc})</span>\`:''}  </span><span style="font-weight:600">\${vl} sqft</span></div>\`).join('')}
+            ${[['Total Space','',p.sqft?.toLocaleString()||0,false],['Entertainment / Lobby','25%',sp.entertain.toLocaleString(),true],['Ingress / Egress','15%',sp.ingress.toLocaleString(),true],['Support / Back-of-house','10%',sp.support.toLocaleString(),true],[`Bathrooms (${baths}×100sqft)`,'',sp.bathSqft.toLocaleString(),true]].map(([lb,pc,vl,ind])=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #e2e8f0;color:${ind?'#94a3b8':'#334155'}"><span style="padding-left:${ind?'8px':'0'}">${ind?'− ':' '}${lb}${pc?` <span style="color:#cbd5e1">(${pc})</span>`:''}  </span><span style="font-weight:600">${vl} sqft</span></div>`).join('')}
             <div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:2px solid #00904a;font-weight:700;margin-top:2px">
-              <span style="color:#334155">Available for Rooms</span><span style="color:#00904a">\${sp.available.toLocaleString()} sqft</span>
+              <span style="color:#334155">Available for Rooms</span><span style="color:#00904a">${sp.available.toLocaleString()} sqft</span>
             </div>
             <div style="font-size:10px;color:#94a3b8;padding:3px 0">÷ 400 sqft / room (25′ × 16′)</div>
             <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">
               <span style="font-size:12px;font-weight:700;color:#334155">Projected Rooms</span>
-              <span style="font-size:22px;font-weight:900;color:#00904a">\${sp.rooms}</span>
+              <span style="font-size:22px;font-weight:900;color:#00904a">${sp.rooms}</span>
             </div>
-            \${sp.leftover>0?\`<div style="font-size:10px;color:#94a3b8;text-align:right">Buffer: \${sp.leftover} sqft</div>\`:''}
+            ${sp.leftover>0?`<div style="font-size:10px;color:#94a3b8;text-align:right">Buffer: ${sp.leftover} sqft</div>`:''}
           </div>
           <div class="lsec">
             <div class="lsec-title">Link to Location</div>
-            <select id="re-link-\${p.id}" onchange="reInp('re-link-\${p.id}',this.value)" style="width:100%;margin-bottom:8px">
+            <select id="re-link-${p.id}" onchange="reInp('re-link-${p.id}',this.value)" style="width:100%;margin-bottom:8px">
               <option value="">— Not linked —</option>
-              \${S.units.map(u=>\`<option value="\${u.id}"\${p.linkedUnitId===u.id?' selected':''}>\${esc(u.name)}</option>\`).join('')}
+              ${S.units.map(u=>`<option value="${u.id}"${p.linkedUnitId===u.id?' selected':''}>${esc(u.name)}</option>`).join('')}
             </select>
-            \${linked?\`<div style="font-size:11px;color:#334155;margin-top:4px">
-              <span style="color:#64748b">Model rent:</span> <strong style="color:#00904a">\${$(linked.rent)}/mo</strong>
+            ${linked?`<div style="font-size:11px;color:#334155;margin-top:4px">
+              <span style="color:#64748b">Model rent:</span> <strong style="color:#00904a">${$(linked.rent)}/mo</strong>
               <span style="color:#94a3b8;margin:0 5px">→</span>
               <span style="color:#64748b">This property:</span>
-              <strong style="color:\${monthly>linked.rent*1.1?'#dc2626':monthly<linked.rent*0.9?'#00904a':'#334155'}">\${$(monthly)}/mo</strong>
-              <button class="btn-sm" style="margin-left:6px" onclick="reSyncRent(\${p.id})">Sync Rent →</button>
-            </div>\`:\`<div style="font-size:11px;color:#94a3b8">Link a location to sync rent into the model.</div>\`}
+              <strong style="color:${monthly>linked.rent*1.1?'#dc2626':monthly<linked.rent*0.9?'#00904a':'#334155'}">${$(monthly)}/mo</strong>
+              <button class="btn-sm" style="margin-left:6px" onclick="reSyncRent(${p.id})">Sync Rent →</button>
+            </div>`:`<div style="font-size:11px;color:#94a3b8">Link a location to sync rent into the model.</div>`}
           </div>
           <div style="margin-top:10px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
-            \${[['Total $/sqft/mo','#334155',((p.baseRent||0)+(p.cams||0)).toFixed(2)],['Monthly Rent','#334155',$(monthly)],[\`Est. Revenue (\${sc.projRooms} rooms)\`,'#334155',$(Math.round(sc.monthlyRevenue))],['10% Rent Ceiling','#64748b',$(Math.round(sc.monthlyRevenue*0.10))+'/mo · $'+sc.rentCeilPsf.toFixed(2)+'/sqft']].map(([lb,cl,vl])=>\`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:#64748b">\${lb}</span><strong style="color:\${cl}">\${vl}</strong></div>\`).join('')}
+            ${[['Total $/sqft/mo','#334155',((p.baseRent||0)+(p.cams||0)).toFixed(2)],['Monthly Rent','#334155',$(monthly)],[`Est. Revenue (${sc.projRooms} rooms)`,'#334155',$(Math.round(sc.monthlyRevenue))],['10% Rent Ceiling','#64748b',$(Math.round(sc.monthlyRevenue*0.10))+'/mo · $'+sc.rentCeilPsf.toFixed(2)+'/sqft']].map(([lb,cl,vl])=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:#64748b">${lb}</span><strong style="color:${cl}">${vl}</strong></div>`).join('')}
             <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;border-top:1px solid #e2e8f0;padding-top:6px;margin-top:4px">
               <span style="color:#334155">Rent-to-Revenue</span>
-              <strong style="color:\${sc.rentToPct>0.20?'#dc2626':sc.rentToPct>0.12?'#d97706':'#00904a'}">\${Math.round(sc.rentToPct*100)}%\${sc.rentToPct>0.20?' ⚠':''}</strong>
+              <strong style="color:${sc.rentToPct>0.20?'#dc2626':sc.rentToPct>0.12?'#d97706':'#00904a'}">${Math.round(sc.rentToPct*100)}%${sc.rentToPct>0.20?' ⚠':''}</strong>
             </div>
           </div>
-        </div>\`:''}
+        </div>`:''}
 
       <!-- TAB CONTENT: SCORING -->
-      \${(rePropTab[p.id]||'details')==='scoring'?\`<div style="margin-top:12px">
-        \${autoData?\`
+      ${(rePropTab[p.id]||'details')==='scoring'?`<div style="margin-top:12px">
+        ${autoData?`
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:12px">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
             <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Trade Area Demographics</span>
             <span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Census Tracts</span>
           </div>
-          \${(()=>{
+          ${(()=>{
             const ta=autoData.tradeArea||{};
             const r3=ta.mi3,r4=ta.mi4,r5=ta.mi5;
             const fmt=(v,type)=>{
@@ -1807,107 +1807,122 @@ function rRE(){
               ['👶','Under 18','%','pctUnder18'],
             ];
             const th='<th style="text-align:center;font-size:10px;font-weight:700;color:#475569;padding:4px 6px;border-bottom:2px solid #e2e8f0">';
-            const td=(v,hi)=>\`<td style="text-align:center;font-size:12px;font-weight:\${hi?'700':'500'};color:\${hi?'#0284c7':'#334155'};padding:3px 6px;border-bottom:1px solid #f1f5f9">\${v}</td>\`;
-            return\`<table style="width:100%;border-collapse:collapse">
+            const td=(v,hi)=>`<td style="text-align:center;font-size:12px;font-weight:${hi?'700':'500'};color:${hi?'#0284c7':'#334155'};padding:3px 6px;border-bottom:1px solid #f1f5f9">${v}</td>`;
+            return`<table style="width:100%;border-collapse:collapse">
               <thead><tr>
                 <th style="text-align:left;font-size:10px;font-weight:700;color:#475569;padding:4px 6px;border-bottom:2px solid #e2e8f0">Metric</th>
-                \${th}3 mi</th>\${th}4 mi</th>\${th}5 mi</th>
+                ${th}3 mi</th>${th}4 mi</th>${th}5 mi</th>
               </tr></thead>
               <tbody>
-                \${rows.map(([ic,lb,type,key])=>\`<tr>
-                  <td style="font-size:11px;color:#64748b;padding:3px 4px;border-bottom:1px solid #f1f5f9">\${ic} \${lb}</td>
-                  \${td(fmt(r3?.[key],type),true)}
-                  \${td(fmt(r4?.[key],type),false)}
-                  \${td(fmt(r5?.[key],type),false)}
-                </tr>\`).join('')}
+                ${rows.map(([ic,lb,type,key])=>`<tr>
+                  <td style="font-size:11px;color:#64748b;padding:3px 4px;border-bottom:1px solid #f1f5f9">${ic} ${lb}</td>
+                  ${td(fmt(r3?.[key],type),true)}
+                  ${td(fmt(r4?.[key],type),false)}
+                  ${td(fmt(r5?.[key],type),false)}
+                </tr>`).join('')}
                 <tr style="background:#f0f9ff">
                   <td style="font-size:10px;color:#94a3b8;padding:3px 4px;font-style:italic">Census tracts</td>
-                  \${td(r3?.tractCount??'—',false)}
-                  \${td(r4?.tractCount??'—',false)}
-                  \${td(r5?.tractCount??'—',false)}
+                  ${td(r3?.tractCount??'—',false)}
+                  ${td(r4?.tractCount??'—',false)}
+                  ${td(r5?.tractCount??'—',false)}
                 </tr>
               </tbody>
-            </table>\`;
+            </table>`;
           })()}
-        </div>\`:''}
+        </div>`:''}
         <div class="sdiv">Score Analysis <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:#94a3b8"> — drag sliders to override</span></div>
-        \${dims.map(dimRow).join('')}
+        ${dims.map(dimRow).join('')}
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;margin-top:4px;border-top:2px solid #e2e8f0">
           <span style="font-size:12px;font-weight:700;color:#334155">TOTAL</span>
-          <span style="font-size:20px;font-weight:900;color:\${scoreColor}">\${sc.total} / 100 · \${gr.g}</span>
+          <span style="font-size:20px;font-weight:900;color:${scoreColor}">${sc.total} / 100 · ${gr.g}</span>
         </div>
         <div style="height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;margin-bottom:16px">
-          <div style="height:100%;width:\${sc.total}%;background:\${scoreColor};border-radius:4px;transition:width 0.3s"></div>
+          <div style="height:100%;width:${sc.total}%;background:${scoreColor};border-radius:4px;transition:width 0.3s"></div>
         </div>
-        \${autoData?\`<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+        ${autoData?`<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
             <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Nearby POIs</span>
-            \${autoData.poiSource==='google'?\`<span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Google Places</span>\`:autoData.poiSource==='osm'?\`<span style="font-size:9px;background:#fef3c7;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:700">OpenStreetMap</span>\`:\`<span style="font-size:9px;background:#f1f5f9;color:#94a3b8;border-radius:3px;padding:1px 5px;font-weight:700">No data</span>\`}
+            ${autoData.poiSource==='google'?`<span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Google Places</span>`:autoData.poiSource==='osm'?`<span style="font-size:9px;background:#fef3c7;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:700">OpenStreetMap</span>`:`<span style="font-size:9px;background:#f1f5f9;color:#94a3b8;border-radius:3px;padding:1px 5px;font-weight:700">No data</span>`}
           </div>
-          \${(()=>{
+          ${(()=>{
             const pl=autoData.poiLists||{};
             const cap=20;
             const poiRow=(ic,cat,lb,names)=>{
               const n=names.length;
               const exp=rePoiExpanded[p.id+'-'+cat]&&n>0;
-              return\`<div style="border-bottom:1px solid #f1f5f9">
-                <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0;cursor:\${n?'pointer':'default'}"
-                  \${n?\`onclick="reTogglePoi(\${p.id},'\${cat}')\"\`:''}}>
-                  <span style="color:#64748b">\${ic} \${lb}\${n?\`<span style="font-size:9px;color:#94a3b8;margin-left:4px">\${exp?'▲':'▼'}</span>\`:''}</span>
-                  <strong style="color:#334155">\${n>0&&n>=cap?'20+':n}</strong>
+              return`<div style="border-bottom:1px solid #f1f5f9">
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0;cursor:${n?'pointer':'default'}"
+                  ${n?`onclick="reTogglePoi(${p.id},'${cat}')\"`:''}}>
+                  <span style="color:#64748b">${ic} ${lb}${n?`<span style="font-size:9px;color:#94a3b8;margin-left:4px">${exp?'▲':'▼'}</span>`:''}</span>
+                  <strong style="color:#334155">${n>0&&n>=cap?'20+':n}</strong>
                 </div>
-                \${exp?\`<div style="padding:4px 0 6px 16px">\${names.map(nm=>\`<div style="font-size:11px;color:#475569;padding:1px 0;border-bottom:1px solid #f8fafc">\${nm}</div>\`).join('')}</div>\`:''}
-              </div>\`;
+                ${exp?`<div style="padding:4px 0 6px 16px">${names.map(nm=>`<div style="font-size:11px;color:#475569;padding:1px 0;border-bottom:1px solid #f8fafc">${nm}</div>`).join('')}</div>`:''}
+              </div>`;
             };
-            const grpHdr=lbl=>\`<div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;padding:6px 0 2px;margin-top:2px">\${lbl}</div>\`;
+            const grpHdr=lbl=>`<div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;padding:6px 0 2px;margin-top:2px">${lbl}</div>`;
             return['Anchors',['🏨','hotels','Hotels (2mi)',pl.hotels||[]],['🏢','employers','Major Employers (2mi)',pl.employers||[]],grpHdr('Restaurants & Bars (1mi)'),['🍽','restFamily','Family / Sit-Down',pl.restFamily||[]],['🍔','restFastFood','Fast Food / QSR',pl.restFastFood||[]],['☕','restCoffee','Coffee Shops',pl.restCoffee||[]],['🍺','restBar','Bars & Nightlife',pl.restBar||[]],grpHdr('Shopping (800m)'),['🛍','shopRetail','Retail Shopping',pl.shopRetail||[]],['🛒','grocery','Grocery Stores (2mi)',pl.grocery||[]],grpHdr('Schools (5mi)'),['🏫','schoolElem','Elementary',pl.schoolElem||[]],['📚','schoolMiddle','Middle School',pl.schoolMiddle||[]],['🎓','schoolHigh','High School',pl.schoolHigh||[]],['🏛','schoolCollege','College / University',pl.schoolCollege||[]],grpHdr('Fitness & Wellness (1mi)'),['💪','gymFitness','Gyms & Fitness',pl.gymFitness||[]],['🧘','gymYoga','Yoga & Pilates',pl.gymYoga||[]],['🏋','gymCrossfit','CrossFit',pl.gymCrossfit||[]],['💃','gymDance','Dance & Martial Arts',pl.gymDance||[]],['💅','wellness','Personal Wellness',pl.wellness||[]],grpHdr('Competition (3mi)'),['🎮','competitors','Entertainment Competitors',pl.competitors||[]]].map((item,idx)=>typeof item==='string'?grpHdr(item):poiRow(...item)).join('');
           })()}
-        </div>\`:''}
-      </div>\`:''}
+        </div>`:''}
+      </div>`:''}
 
       <!-- TAB CONTENT: CAPEX -->
-      \${(rePropTab[p.id]||'details')==='capex'?(()=>{
+      ${(rePropTab[p.id]||'details')==='capex'?(()=>{
+        const amts=p.reCapexAmts||{};
         const rc=Object.assign({},DEF_RE_CAPEX,S.reCapex||{});
-        const items=[
-          {label:'GC Work',amt:Math.round(p.sqft*rc.gcPsf),basis:\`\${p.sqft?.toLocaleString()||0} sqft × \$\${rc.gcPsf}/sqft\`},
-          {label:'Room Technology',amt:Math.round(sp.rooms*rc.techPerRoom),basis:\`\${sp.rooms} rooms × \$\${rc.techPerRoom.toLocaleString()}\`},
-          {label:'Gridstrike Tiles',amt:Math.round(sp.rooms*rc.tilesPerRoom),basis:\`\${sp.rooms} rooms × \$\${rc.tilesPerRoom.toLocaleString()}\`},
-          {label:'Brand Finishes',amt:Math.round(sp.rooms*rc.brandPerRoom),basis:\`\${sp.rooms} rooms × \$\${rc.brandPerRoom.toLocaleString()}\`},
-          {label:'Room Furniture',amt:Math.round(sp.rooms*rc.furniturePerRoom),basis:\`\${sp.rooms} rooms × \$\${rc.furniturePerRoom.toLocaleString()}\`},
-          {label:'Lobby Furniture',amt:Math.round(rc.lobbyFurniture),basis:'Fixed'},
-          {label:'Bathrooms',amt:Math.round(baths*rc.bathCost),basis:\`\${baths} baths × \$\${rc.bathCost.toLocaleString()}\`},
-          {label:'Arch & Engineering',amt:Math.round(rc.archEng),basis:'Fixed'},
-          {label:'Permitting Fees',amt:Math.round(rc.permitting),basis:'Fixed'},
-          {label:'Exterior Signage',amt:Math.round(rc.signage),basis:'Fixed'},
-          {label:'Opening Inventory',amt:Math.round(rc.inventory),basis:'Fixed'},
-          {label:'Grand Opening Mktg',amt:Math.round(rc.marketing),basis:'Fixed'},
+        const rows=[
+          {key:'gcWork',       label:'GC Work',              basis:`${p.sqft?.toLocaleString()||0} sqft × $${rc.gcPsf}/sqft`},
+          {key:'techPerRoom',  label:'Room Technology',       basis:`${sp.rooms} rooms × $${rc.techPerRoom.toLocaleString()}`},
+          {key:'tilesPerRoom', label:'Gridstrike Tiles',      basis:`${sp.rooms} rooms × $${rc.tilesPerRoom.toLocaleString()}`},
+          {key:'brandPerRoom', label:'Brand Finishes',        basis:`${sp.rooms} rooms × $${rc.brandPerRoom.toLocaleString()}`},
+          {key:'furniturePerRoom',label:'Room Furniture',     basis:`${sp.rooms} rooms × $${rc.furniturePerRoom.toLocaleString()}`},
+          {key:'lobbyFurniture',label:'Lobby Furniture',      basis:'Fixed'},
+          {key:'bathrooms',    label:'Bathrooms',             basis:`${baths} baths × $${rc.bathCost.toLocaleString()}`},
+          {key:'archEng',      label:'Arch & Engineering',    basis:'Fixed'},
+          {key:'permitting',   label:'Permitting Fees',       basis:'Fixed'},
+          {key:'signage',      label:'Exterior Signage',      basis:'Fixed'},
+          {key:'inventory',    label:'Opening Inventory',     basis:'Fixed'},
+          {key:'marketing',    label:'Grand Opening Mktg',    basis:'Fixed'},
         ];
-        const totalCapex=items.reduce((s,x)=>s+x.amt,0);
-        return\`<div style="margin-top:12px">
+        const totalCapex=rows.reduce((s,r)=>s+(amts[r.key]||0),0);
+        return`<div style="margin-top:12px">
           <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">CAPEX Estimate</span>
+              <button onclick="reResetCapex(${p.id})" title="Recalculate all lines from Setup assumptions"
+                style="border:none;background:#f1f5f9;color:#64748b;border-radius:5px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer">↺ Reset to Assumptions</button>
+            </div>
             <table style="width:100%;font-size:12px">
               <thead><tr style="border-bottom:2px solid #e2e8f0">
-                <th style="text-align:left;padding:6px 0;color:#64748b;font-weight:700;font-size:11px">Item</th>
-                <th style="text-align:left;padding:6px 0;color:#64748b;font-weight:700;font-size:11px">Basis</th>
-                <th style="text-align:right;padding:6px 0;color:#64748b;font-weight:700;font-size:11px">Amount</th>
+                <th style="text-align:left;padding:5px 0;color:#64748b;font-weight:700;font-size:10px;width:38%">Item</th>
+                <th style="text-align:left;padding:5px 0;color:#64748b;font-weight:700;font-size:10px;width:35%">Default Basis</th>
+                <th style="text-align:right;padding:5px 0;color:#64748b;font-weight:700;font-size:10px;width:27%">Amount</th>
               </tr></thead>
               <tbody>
-                \${items.map(v=>\`<tr style="border-bottom:1px solid #f1f5f9">
-                  <td style="padding:6px 0;color:#334155">\${v.label}</td>
-                  <td style="padding:6px 0;color:#64748b;font-size:11px">\${v.basis}</td>
-                  <td style="padding:6px 0;text-align:right;color:#00904a;font-weight:600">\${$(v.amt)}</td>
-                </tr>\`).join('')}
+                ${rows.map(r=>`<tr style="border-bottom:1px solid #f1f5f9">
+                  <td style="padding:4px 0;color:#334155;font-size:11px">${r.label}</td>
+                  <td style="padding:4px 0;color:#94a3b8;font-size:10px">${r.basis}</td>
+                  <td style="padding:4px 0;text-align:right">
+                    <div class="iw" style="display:inline-flex;align-items:center;max-width:110px">
+                      <span class="pre" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:11px;font-weight:600;pointer-events:none">$</span>
+                      <input type="text" inputmode="decimal" id="re-cx-${r.key}-${p.id}"
+                        value="${fmtN(amts[r.key]||0)}" class="hp"
+                        style="width:100px;font-size:11px;font-weight:600;color:#00904a;text-align:right;padding-right:4px"
+                        onfocus="niFocus(this)" onblur="niBlur(this)"
+                        onchange="reInp('re-cx-${r.key}-${p.id}',this.value.replace(/,/g,''))">
+                    </div>
+                  </td>
+                </tr>`).join('')}
                 <tr style="border-top:2px solid #e2e8f0;background:#f0fdf4">
                   <td colspan="2" style="padding:8px 0;color:#334155;font-weight:700">TOTAL CAPEX</td>
-                  <td style="padding:8px 0;text-align:right;color:#00904a;font-weight:900;font-size:14px">\${$(totalCapex)}</td>
+                  <td style="padding:8px 0;text-align:right;color:#00904a;font-weight:900;font-size:14px">${$(totalCapex)}</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <div style="margin-top:10px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:11px;color:#166534">
-            Based on \${sp.rooms} rooms · \${baths} baths · \${p.sqft?.toLocaleString()||0} sqft. Adjust assumptions in Setup → General CAPEX Assumptions.
+          <div style="margin-top:8px;font-size:10px;color:#94a3b8;text-align:center">
+            Seeded from Setup assumptions · ${sp.rooms} rooms · ${baths} baths · ${p.sqft?.toLocaleString()||0} sqft · Edit any line freely — Setup changes won't overwrite
           </div>
-        </div>\`;
+        </div>`;
       })():''}
 
 
@@ -2133,7 +2148,39 @@ function reToggleCollapse(id){
   S.reProps=(S.reProps||[]).map(p=>p.id===id?{...p,collapsed:!p.collapsed}:p);
   save();render();
 }
-function reSetTab(propId,tab){rePropTab[propId]=tab;render();}
+function reCapexSeed(propId){
+  const p=(S.reProps||[]).find(x=>x.id===propId);
+  if(!p||p.reCapexAmts)return; // already seeded — don't overwrite
+  const rc=Object.assign({},DEF_RE_CAPEX,S.reCapex||{});
+  const sp=spaceCalc(p.sqft,p.bathrooms||1);
+  const baths=p.bathrooms||1;
+  const amts={
+    gcWork:Math.round((p.sqft||0)*rc.gcPsf),
+    techPerRoom:Math.round(sp.rooms*rc.techPerRoom),
+    tilesPerRoom:Math.round(sp.rooms*rc.tilesPerRoom),
+    brandPerRoom:Math.round(sp.rooms*rc.brandPerRoom),
+    furniturePerRoom:Math.round(sp.rooms*rc.furniturePerRoom),
+    lobbyFurniture:Math.round(rc.lobbyFurniture),
+    bathrooms:Math.round(baths*rc.bathCost),
+    archEng:Math.round(rc.archEng),
+    permitting:Math.round(rc.permitting),
+    signage:Math.round(rc.signage),
+    inventory:Math.round(rc.inventory),
+    marketing:Math.round(rc.marketing),
+  };
+  S.reProps=S.reProps.map(x=>x.id===propId?{...x,reCapexAmts:amts}:x);
+  save();
+}
+function reResetCapex(propId){
+  // Force re-seed from current assumptions
+  S.reProps=S.reProps.map(x=>x.id===propId?{...x,reCapexAmts:null}:x);
+  save();reCapexSeed(propId);render();
+}
+function reSetTab(propId,tab){
+  rePropTab[propId]=tab;
+  if(tab==='capex')reCapexSeed(propId);
+  render();
+}
 function reTogglePoi(propId,cat){
   const k=propId+'-'+cat;
   rePoiExpanded[k]=!rePoiExpanded[k];
@@ -2156,6 +2203,18 @@ function reSyncRent(propId){
 function reInp(id,val){
   if(!S.reProps)S.reProps=[];
   const n=parseFloat(val);
+  // CAPEX line-item override
+  const cx=id.match(/^re-cx-(\w+)-(\d+)$/);
+  if(cx){
+    const[,key,pidStr]=cx;const pid=parseInt(pidStr);
+    S.reProps=S.reProps.map(p=>{
+      if(p.id!==pid)return p;
+      const amts=Object.assign({},p.reCapexAmts||{});
+      amts[key]=isNaN(parseFloat(val))?0:parseFloat(val);
+      return{...p,reCapexAmts:amts};
+    });
+    save();render();return;
+  }
   const m=id.match(/^re-(addr|sqft|br|cams|term|zone|notes|link|demographics|footTraffic|parking|visibility|anchorProximity|youngAdult|familyDensity|baths)-(\d+)$/);
   if(!m)return;
   const [,field,pidStr]=m;
