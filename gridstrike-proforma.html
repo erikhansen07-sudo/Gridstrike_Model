@@ -135,6 +135,14 @@ const DEF_RE_CAPEX={
   inventory:9000,     // opening inventory (fixed)
   marketing:6000,     // grand opening marketing (fixed)
 };
+const DEF_RE_OPEX={
+  supplies:2500,     // monthly supplies (fixed)
+  laborRate:18,      // hourly base wage
+  laborHours:60,     // open hours per week
+  marketing:1500,    // monthly marketing (fixed)
+  utilitiesPsf:0.75, // monthly utilities per sqft
+  misc:500,          // monthly misc (fixed)
+};
 const DEF_SCORING={
   // ── Dimension weights (should sum to 100) ───────────────────────────────
   wRent:15, wSize:10, wDemo:15, wYoung:10, wFamily:15,
@@ -176,6 +184,7 @@ const DEFAULTS={
   capexPaybackRate:90,
   scoring:{...DEF_SCORING},
   reCapex:{...DEF_RE_CAPEX},
+  reOpex:{...DEF_RE_OPEX},
   equityTiers:DEFEQTIERS.map(t=>({...t})),
   devFeeTiers:DEFDFTIERS.map(t=>({...t})),
   reProps:[
@@ -199,6 +208,7 @@ function migrateState(s){
   if(!s.retentionRates)s.retentionRates=[10,10,10,10,10];
   if(!s.scoring)s.scoring={...DEF_SCORING};
   if(!s.reCapex)s.reCapex={...DEF_RE_CAPEX};
+  if(!s.reOpex)s.reOpex={...DEF_RE_OPEX};
   if(!s.capexPaybackRate)s.capexPaybackRate=90;
   if(!s.equityTiers)s.equityTiers=DEFEQTIERS.map(t=>({...t}));
   if(!s.devFeeTiers)s.devFeeTiers=DEFDFTIERS.map(t=>({...t}));
@@ -593,68 +603,6 @@ function rSetup(){
     </div>
 
     <div class="card">
-      <div class="card-title">Default CAPEX Assumptions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(applied when a new location is created or rooms are changed)</span></div>
-      <div style="overflow-x:auto">
-        <table>
-          <thead><tr>
-            <th style="text-align:left;min-width:170px">Cost Item</th>
-            ${[2,3,4,5,6].map(r=>`<th>${r} Rooms</th>`).join('')}
-          </tr></thead>
-          <tbody>
-            ${CX_ROWS.map((label,ri)=>`
-              <tr style="background:${ri%2===0?'#fff':'#fafbfc'}">
-                <td style="color:#334155;font-weight:500">${label}</td>
-                ${[0,1,2,3,4].map(ci=>`
-                  <td><div class="iw"><span class="pre">$</span>
-                    <input type="text" inputmode="decimal" id="cxm-${ri}-${ci}"
-                      value="${fmtN((S.capexMatrix||DEFCAPEX)[ri][ci])}"
-                      class="hp"
-                      onfocus="niFocus(this)" onblur="niBlur(this)"
-                      onchange="inp('cxm-${ri}-${ci}',this.value.replace(/,/g,''))"
-                      style="width:100px">
-                  </div></td>`).join('')}
-              </tr>`).join('')}
-            <tr style="background:#f0f9ff;font-weight:700;border-top:2px solid #bae6fd">
-              <td style="color:#0284c7">Total CAPEX</td>
-              ${[0,1,2,3,4].map(ci=>`
-                <td style="color:${CY}">${$((S.capexMatrix||DEFCAPEX).reduce((s,r)=>s+r[ci],0))}</td>`).join('')}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Default OPEX Assumptions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(monthly costs — editable per-location in the Locations tab)</span></div>
-      <div style="overflow-x:auto">
-        <table>
-          <thead><tr>
-            <th style="text-align:left;min-width:130px">Cost Item</th>
-            ${[2,3,4,5,6].map(r=>`<th>${r} Rooms</th>`).join('')}
-          </tr></thead>
-          <tbody>
-            ${OX_ROWS.map((label,ri)=>`
-              <tr style="background:${ri%2===0?'#fff':'#fafbfc'}">
-                <td style="color:#334155;font-weight:500">${label}</td>
-                ${[0,1,2,3,4].map(ci=>`
-                  <td><div class="iw"><span class="pre">$</span>
-                    <input type="text" inputmode="decimal" id="oxm-${ri}-${ci}"
-                      value="${fmtN((S.opexMatrix||DEFOPEX)[ri][ci])}"
-                      class="hp"
-                      onfocus="niFocus(this)" onblur="niBlur(this)"
-                      onchange="inp('oxm-${ri}-${ci}',this.value.replace(/,/g,''))"
-                      style="width:100px">
-                  </div></td>`).join('')}
-              </tr>`).join('')}
-            <tr style="background:#f0fdf4;font-weight:700;border-top:2px solid #bbf7d0">
-              <td style="color:${GR}">Total / Mo</td>
-              ${[0,1,2,3,4].map(ci=>`
-                <td style="color:${GR}">${$((S.opexMatrix||DEFOPEX).reduce((s,r)=>s+r[ci],0))}</td>`).join('')}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="card">
       <div class="card-title">Revenue Ramp <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(% of steady-state revenue by year since open)</span></div>
       <table style="width:260px">
         <thead><tr><th>Year Since Open</th><th>Ramp %</th></tr></thead>
@@ -720,6 +668,27 @@ function rSetup(){
         ${ni('rc-marketing','Grand Opening Mktg',S.reCapex?.marketing??DEF_RE_CAPEX.marketing,{pre:'$',step:500,min:0})}
       </div>
       <button onclick="inp('rc-reset','')" style="border:none;background:#f1f5f9;color:#64748b;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">↺ Reset to defaults</button>
+    </div>
+    <div class="card">
+      <div class="card-title">General OPEX Assumptions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(monthly cost estimates — seeded into each Real Estate location)</span></div>
+      <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0;margin-bottom:8px">Fixed Monthly</div>
+      <div class="g4" style="margin-bottom:12px">
+        ${ni('ro-supplies','Supplies',S.reOpex?.supplies??DEF_RE_OPEX.supplies,{pre:'$',step:100,min:0})}
+        ${ni('ro-marketing','Marketing',S.reOpex?.marketing??DEF_RE_OPEX.marketing,{pre:'$',step:100,min:0})}
+        ${ni('ro-misc','Misc',S.reOpex?.misc??DEF_RE_OPEX.misc,{pre:'$',step:100,min:0})}
+      </div>
+      <div class="sdiv" style="margin-bottom:8px">Labor</div>
+      <div class="g4" style="margin-bottom:4px">
+        ${ni('ro-laborRate','Hourly Base Wage',S.reOpex?.laborRate??DEF_RE_OPEX.laborRate,{pre:'$',step:1,min:0})}
+        ${ni('ro-laborHours','Open Hours / Week',S.reOpex?.laborHours??DEF_RE_OPEX.laborHours,{step:1,min:0})}
+      </div>
+      <div class="hint" style="margin-bottom:12px">Est. monthly labor = hourly × hours/wk × 4.33 = <strong style="color:${CY}">${$( Math.round((S.reOpex?.laborRate??DEF_RE_OPEX.laborRate)*(S.reOpex?.laborHours??DEF_RE_OPEX.laborHours)*4.33) )}/mo</strong></div>
+      <div class="sdiv" style="margin-bottom:8px">Utilities (per sqft)</div>
+      <div class="g4" style="margin-bottom:4px">
+        ${ni('ro-utilitiesPsf','Monthly Rate ($/sqft)',S.reOpex?.utilitiesPsf??DEF_RE_OPEX.utilitiesPsf,{pre:'$',step:0.05,min:0})}
+      </div>
+      <div class="hint" style="margin-bottom:12px">Utilities estimated at ${S.reOpex?.utilitiesPsf??DEF_RE_OPEX.utilitiesPsf}/sqft/mo — scales with location size</div>
+      <button onclick="inp('ro-reset','')" style="border:none;background:#f1f5f9;color:#64748b;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">↺ Reset to defaults</button>
     </div>
     ${rScoringConfig()}`;
 }
@@ -1710,8 +1679,8 @@ function rRE(){
       ${collapsed?'':`
       <!-- TAB BAR -->
       <div style="display:flex;gap:0;border-bottom:2px solid #e2e8f0;margin:12px 0 0">
-        ${['details','scoring','capex'].map(t=>{
-          const lbl={details:'📋 Location Details',scoring:'🎯 Scoring',capex:'🏗 CAPEX'}[t];
+        ${['details','scoring','capex','opex'].map(t=>{
+          const lbl={details:'📋 Location Details',scoring:'🎯 Scoring',capex:'🏗 CAPEX',opex:'📊 OPEX'}[t];
           const active=(rePropTab[p.id]||'details')===t;
           return`<button onclick="reSetTab(${p.id},'${t}')"
             style="border:none;background:none;padding:8px 16px;font-size:12px;font-weight:${active?700:500};
@@ -1925,6 +1894,68 @@ function rRE(){
         </div>`;
       })():''}
 
+      <!-- TAB CONTENT: OPEX -->
+      ${(rePropTab[p.id]||'details')==='opex'?(()=>{
+        const amts=p.reOpexAmts||{};
+        const ro=Object.assign({},DEF_RE_OPEX,S.reOpex||{});
+        const rows=[
+          {key:'supplies',   label:'Supplies',   basis:'Fixed monthly'},
+          {key:'labor',      label:'Labor',       basis:`$${ro.laborRate}/hr × ${ro.laborHours} hrs/wk × 4.33`},
+          {key:'marketing',  label:'Marketing',   basis:'Fixed monthly'},
+          {key:'utilities',  label:'Utilities',   basis:`${p.sqft?.toLocaleString()||0} sqft × $${ro.utilitiesPsf}/sqft`},
+          {key:'misc',       label:'Misc',        basis:'Fixed monthly'},
+        ];
+        const totalOpex=rows.reduce((s,r)=>s+(amts[r.key]||0),0);
+        const rent=Math.round(((p.baseRent||0)+(p.cams||0))*(p.sqft||0));
+        return`<div style="margin-top:12px">
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Monthly OPEX Estimate</span>
+              <button onclick="reResetOpex(${p.id})" title="Recalculate from Setup assumptions"
+                style="border:none;background:#f1f5f9;color:#64748b;border-radius:5px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer">↺ Reset to Assumptions</button>
+            </div>
+            <table style="width:100%;font-size:12px">
+              <thead><tr style="border-bottom:2px solid #e2e8f0">
+                <th style="text-align:left;padding:5px 0;color:#64748b;font-weight:700;font-size:10px;width:30%">Item</th>
+                <th style="text-align:left;padding:5px 0;color:#64748b;font-weight:700;font-size:10px;width:43%">Default Basis</th>
+                <th style="text-align:right;padding:5px 0;color:#64748b;font-weight:700;font-size:10px;width:27%">Monthly</th>
+              </tr></thead>
+              <tbody>
+                <tr style="border-bottom:1px solid #f1f5f9">
+                  <td style="padding:4px 0;color:#94a3b8;font-size:11px">Rent</td>
+                  <td style="padding:4px 0;color:#94a3b8;font-size:10px">From Location Details</td>
+                  <td style="padding:4px 0;text-align:right;color:#94a3b8;font-size:11px;font-weight:600">${$(rent)}</td>
+                </tr>
+                ${rows.map(r=>`<tr style="border-bottom:1px solid #f1f5f9">
+                  <td style="padding:4px 0;color:#334155;font-size:11px">${r.label}</td>
+                  <td style="padding:4px 0;color:#94a3b8;font-size:10px">${r.basis}</td>
+                  <td style="padding:4px 0;text-align:right">
+                    <div class="iw" style="display:inline-flex;align-items:center;max-width:110px">
+                      <span class="pre" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:11px;font-weight:600;pointer-events:none">$</span>
+                      <input type="text" inputmode="decimal" id="re-ox-${r.key}-${p.id}"
+                        value="${fmtN(amts[r.key]||0)}" class="hp"
+                        style="width:100px;font-size:11px;font-weight:600;color:#00904a;text-align:right;padding-right:4px"
+                        onfocus="niFocus(this)" onblur="niBlur(this)"
+                        onchange="reInp('re-ox-${r.key}-${p.id}',this.value.replace(/,/g,''))">
+                    </div>
+                  </td>
+                </tr>`).join('')}
+                <tr style="border-top:2px solid #e2e8f0;background:#f0fdf4">
+                  <td colspan="2" style="padding:6px 0;color:#334155;font-weight:700">Total OPEX (excl. rent)</td>
+                  <td style="padding:6px 0;text-align:right;color:#00904a;font-weight:900;font-size:13px">${$(totalOpex)}/mo</td>
+                </tr>
+                <tr style="background:#fafafa">
+                  <td colspan="2" style="padding:6px 0;color:#334155;font-weight:700">Total OPEX (incl. rent)</td>
+                  <td style="padding:6px 0;text-align:right;color:#334155;font-weight:900;font-size:13px">${$(totalOpex+rent)}/mo</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="margin-top:8px;font-size:10px;color:#94a3b8;text-align:center">
+            Seeded from Setup assumptions · ${p.sqft?.toLocaleString()||0} sqft · Edit any line freely — Setup changes won't overwrite
+          </div>
+        </div>`;
+      })():''}
 
       <!-- Notes -->
       <div style="margin-top:14px">
@@ -2039,6 +2070,12 @@ function inp(id,val){
     if(!S.reCapex)S.reCapex={...DEF_RE_CAPEX};
     S.reCapex[key]=parseFloat(val)||0;
   }
+  else if(id==='ro-reset'){S.reOpex={...DEF_RE_OPEX};}
+  else if(id.startsWith('ro-')){
+    const key=id.slice(3);
+    if(!S.reOpex)S.reOpex={...DEF_RE_OPEX};
+    S.reOpex[key]=parseFloat(val)||0;
+  }
   else{
     const eqm=id.match(/^eq-(t|p)-(\d+)$/);
     if(eqm){
@@ -2148,6 +2185,26 @@ function reToggleCollapse(id){
   S.reProps=(S.reProps||[]).map(p=>p.id===id?{...p,collapsed:!p.collapsed}:p);
   save();render();
 }
+function reOpexSeed(propId){
+  const p=(S.reProps||[]).find(x=>x.id===propId);
+  if(!p||p.reOpexAmts)return;
+  const ro=Object.assign({},DEF_RE_OPEX,S.reOpex||{});
+  const monthlyLabor=Math.round(ro.laborRate*ro.laborHours*4.33);
+  const monthlyUtils=Math.round((p.sqft||0)*ro.utilitiesPsf);
+  const amts={
+    supplies:Math.round(ro.supplies),
+    labor:monthlyLabor,
+    marketing:Math.round(ro.marketing),
+    utilities:monthlyUtils,
+    misc:Math.round(ro.misc),
+  };
+  S.reProps=S.reProps.map(x=>x.id===propId?{...x,reOpexAmts:amts}:x);
+  save();
+}
+function reResetOpex(propId){
+  S.reProps=S.reProps.map(x=>x.id===propId?{...x,reOpexAmts:null}:x);
+  save();reOpexSeed(propId);render();
+}
 function reCapexSeed(propId){
   const p=(S.reProps||[]).find(x=>x.id===propId);
   if(!p||p.reCapexAmts)return; // already seeded — don't overwrite
@@ -2179,6 +2236,7 @@ function reResetCapex(propId){
 function reSetTab(propId,tab){
   rePropTab[propId]=tab;
   if(tab==='capex')reCapexSeed(propId);
+  if(tab==='opex')reOpexSeed(propId);
   render();
 }
 function reTogglePoi(propId,cat){
@@ -2212,6 +2270,18 @@ function reInp(id,val){
       const amts=Object.assign({},p.reCapexAmts||{});
       amts[key]=isNaN(parseFloat(val))?0:parseFloat(val);
       return{...p,reCapexAmts:amts};
+    });
+    save();render();return;
+  }
+  // OPEX line-item override
+  const ox=id.match(/^re-ox-(\w+)-(\d+)$/);
+  if(ox){
+    const[,key,pidStr]=ox;const pid=parseInt(pidStr);
+    S.reProps=S.reProps.map(p=>{
+      if(p.id!==pid)return p;
+      const amts=Object.assign({},p.reOpexAmts||{});
+      amts[key]=isNaN(parseFloat(val))?0:parseFloat(val);
+      return{...p,reOpexAmts:amts};
     });
     save();render();return;
   }
