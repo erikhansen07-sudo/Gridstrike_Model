@@ -134,6 +134,10 @@ const DEFAULTS={
   capexPaybackRate:90,
   equityTiers:DEFEQTIERS.map(t=>({...t})),
   devFeeTiers:DEFDFTIERS.map(t=>({...t})),
+  reProps:[
+    {id:1,address:'3225 Business Park Dr #1, Vista CA 92081',sqft:2250,baseRent:2.75,cams:1.00,leaseTerm:5,linkedUnitId:null,
+     demographics:7,footTraffic:5,parking:7,visibility:5,anchorProximity:7,zoning:'Industrial Flex',notes:'Near Ayres Hotel. Business park — low walk-in. Negotiate CAMS.'}
+  ],
   units:[
     {id:1,name:'Location 1',    om:1,oy:2026,rooms:2,capex:150000,rent:8438,mCogs:2500,mLabor:9250,mMktg:1500,mMisc:1500},
     
@@ -141,6 +145,7 @@ const DEFAULTS={
 };
 function migrateState(s){
   if(!s.comp){s.comp=Array.from({length:20},(_,i)=>({devFee:s.units[i]?.devFee||35000,revShare:s.units[i]?.revShare||10,equity:0}));}
+  if(!s.reProps)s.reProps=[];
   if(!s.distributions)s.distributions=[0,0,0,0,0];
   if(!s.ramp)s.ramp=[.50,.70,.88,1.00,1.00];
   if(!s.capexMatrix)s.capexMatrix=DEFCAPEX.map(r=>[...r]);
@@ -190,7 +195,7 @@ function opexForRooms(rooms){
 }
 let nid=3;
 let S={...DEFAULTS,comp:DEFAULTS.comp.map(c=>({...c}))};
-try{const raw=localStorage.getItem('sq-state');if(raw){S=migrateState(JSON.parse(raw));nid=Math.max(...S.units.map(u=>u.id))+1;}}catch(e){}
+try{const raw=localStorage.getItem('sq-state');if(raw){S=migrateState(JSON.parse(raw));nid=Math.max(...S.units.map(u=>u.id))+1;if(S.reProps&&S.reProps.length)reNextId=Math.max(...S.reProps.map(p=>p.id))+1;}}catch(e){}
 function save(){try{localStorage.setItem('sq-state',JSON.stringify(S));}catch(e){}}
 
 // ─── Local Save Only ──────────────────────────────────────────────────────────
@@ -292,6 +297,34 @@ function mc(label,val,accent,sub=''){
 }
 
 const LOGO=`<div style="font-family:'Orbitron',sans-serif;font-weight:900;font-size:1.05rem;letter-spacing:0.08em;line-height:1"><span style="color:#e4edf8">GRID</span><span style="color:#00E564">STRIKE</span></div>`;
+
+
+// ─── Real Estate Scoring ──────────────────────────────────────────────────────
+function scoreRE(p){
+  const totalRentPerSqft=p.baseRent+(p.cams||0);
+  // Rent efficiency (25pts): ideal <$2.50, bad >$4.50
+  const rentScore=Math.max(0,25-Math.max(0,(totalRentPerSqft-2.00)*10));
+  // Size fit (15pts): ideal 2000-3500sqft
+  const sqft=p.sqft||0;
+  const sizeDiff=sqft<2000?2000-sqft:sqft>3500?sqft-3500:0;
+  const sizeScore=Math.max(0,15-sizeDiff/100);
+  // Manual scores (each out of 10, scaled to weights)
+  const demoScore =(p.demographics||5)/10*20;  // 20pts
+  const ftScore   =(p.footTraffic||5)/10*20;   // 20pts
+  const parkScore =(p.parking||5)/10*10;        // 10pts
+  const visScore  =(p.visibility||5)/10*5;      // 5pts
+  const anchorScore=(p.anchorProximity||5)/10*5;// 5pts
+  const total=rentScore+sizeScore+demoScore+ftScore+parkScore+visScore+anchorScore;
+  return{total:Math.round(Math.min(100,total)),rentScore,sizeScore,demoScore,ftScore,parkScore,visScore,anchorScore};
+}
+function reGrade(score){
+  if(score>=85)return{g:'A',c:'#15803d',bg:'#f0fdf4'};
+  if(score>=70)return{g:'B',c:'#00904a',bg:'#d4fce8'};
+  if(score>=55)return{g:'C',c:'#d97706',bg:'#fffbeb'};
+  if(score>=40)return{g:'D',c:'#dc2626',bg:'#fff1f2'};
+  return{g:'F',c:'#7f1d1d',bg:'#fee2e2'};
+}
+let reNextId=2;
 
 // ─── Tab: Locations ────────────────────────────────────────────────────────
 function rLoc(){
@@ -958,12 +991,199 @@ function rMonthlyCF(){
   }).join('');
 }
 
+
+// ─── Tab: Real Estate Analysis ───────────────────────────────────────────────
+function rRE(){
+  const props=S.reProps||[];
+  const ni2=(id,label,val,{pre,suf,step=1,min,max,w='100%'}={})=>`<div>
+    <label class="label">${esc(label)}</label>
+    <div class="iw">
+      ${pre?`<span class="pre">${esc(pre)}</span>`:''}
+      <input type="text" inputmode="decimal" id="${id}" value="${fmtN(val)}"
+        class="${pre?'hp':''} ${suf?'hs':''}"
+        style="width:${w}"
+        onfocus="niFocus(this)" onblur="niBlur(this)"
+        onchange="reInp('${id}',this.value.replace(/,/g,''))">
+      ${suf?`<span class="suf">${esc(suf)}</span>`:''}
+    </div></div>`;
+
+  const scoreBar=(label,val,max,color)=>{
+    const pct=Math.round((val/max)*100);
+    return`<div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-bottom:3px">
+        <span>${label}</span><span style="font-weight:600;color:${color}">${val.toFixed(1)} / ${max}</span>
+      </div>
+      <div style="height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width 0.3s"></div>
+      </div>
+    </div>`;
+  };
+
+  const propCards=props.map((p,pi)=>{
+    const sc=scoreRE(p);
+    const gr=reGrade(sc.total);
+    const monthly=(p.baseRent+(p.cams||0))*p.sqft;
+    const linked=p.linkedUnitId?S.units.find(u=>u.id===p.linkedUnitId):null;
+
+    // Score color gradient
+    const scoreColor=sc.total>=70?'#00904a':sc.total>=55?'#d97706':'#dc2626';
+
+    return`<div class="card" style="margin-bottom:16px;border-left:4px solid ${gr.c}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <input type="text" id="re-addr-${p.id}" value="${esc(p.address)}"
+            placeholder="Address"
+            onchange="reInp('re-addr-${p.id}',this.value)"
+            style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 10px;color:#0f172a;font-size:14px;font-weight:700;outline:none">
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+          <!-- Score badge -->
+          <div style="text-align:center;background:${gr.bg};border:2px solid ${gr.c};border-radius:10px;padding:8px 16px;min-width:80px">
+            <div style="font-size:28px;font-weight:900;color:${gr.c};line-height:1">${sc.total}</div>
+            <div style="font-size:10px;font-weight:700;color:${gr.c};letter-spacing:1px">SCORE · ${gr.g}</div>
+          </div>
+          ${props.length>1?`<button class="btn-del" onclick="reRemove(${p.id})">Remove</button>`:''}
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <!-- Left: Property Details -->
+        <div>
+          <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0">Property Details</div>
+          <div class="g3" style="margin-bottom:12px">
+            ${ni2(`re-sqft-${p.id}`,'Sq Footage',p.sqft,{step:50,min:500})}
+            ${ni2(`re-br-${p.id}`,'Base Rent ($/sqft)',p.baseRent,{step:0.25,min:0})}
+            ${ni2(`re-cams-${p.id}`,'CAMS/NNN ($/sqft)',p.cams||0,{step:0.25,min:0})}
+          </div>
+          <div class="g2" style="margin-bottom:12px">
+            <div>
+              <label class="label">Zoning Type</label>
+              <select id="re-zone-${p.id}" onchange="reInp('re-zone-${p.id}',this.value)">
+                ${['Industrial Flex','Retail Strip','Mixed Use','Standalone','Mall/Center','Other'].map(z=>`<option value="${z}"${p.zoning===z?' selected':''}>${z}</option>`).join('')}
+              </select>
+            </div>
+            ${ni2(`re-term-${p.id}`,'Lease Term (yrs)',p.leaseTerm||5,{step:1,min:1})}
+          </div>
+
+          <!-- Link to Location -->
+          <div class="lsec" style="margin-top:8px">
+            <div class="lsec-title">Link to Location</div>
+            <select id="re-link-${p.id}" onchange="reInp('re-link-${p.id}',this.value)"
+              style="width:100%;margin-bottom:8px">
+              <option value="">— Not linked —</option>
+              ${S.units.map(u=>`<option value="${u.id}"${p.linkedUnitId===u.id?' selected':''}>${esc(u.name)}</option>`).join('')}
+            </select>
+            ${linked?`
+            <div style="font-size:11px;color:#334155;margin-top:6px">
+              <span style="color:#64748b">Current rent in model:</span>
+              <strong style="color:#00904a">${$(linked.rent)}/mo</strong>
+              <span style="color:#94a3b8;margin:0 6px">→</span>
+              <span style="color:#64748b">This property:</span>
+              <strong style="color:${monthly>linked.rent*1.1?'#dc2626':monthly<linked.rent*0.9?'#00904a':'#334155'}">${$(monthly)}/mo</strong>
+              <button class="btn-sm" style="margin-left:8px" onclick="reSyncRent(${p.id})">Sync Rent →</button>
+            </div>`:`<div style="font-size:11px;color:#94a3b8">Link to a location to sync rent into the financial model.</div>`}
+          </div>
+
+          <!-- Monthly summary -->
+          <div style="margin-top:12px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+              <span style="color:#64748b">Total $/sqft/mo</span>
+              <strong style="color:#334155">${((p.baseRent||0)+(p.cams||0)).toFixed(2)}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+              <span style="color:#64748b">Monthly Rent</span>
+              <strong style="color:#334155">${$(monthly)}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;border-top:1px solid #e2e8f0;padding-top:6px;margin-top:4px">
+              <span style="color:#334155">Annual Rent</span>
+              <strong style="color:#00904a">${$(monthly*12)}</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Scoring -->
+        <div>
+          <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0">Location Scores <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94a3b8">(rate 1–10)</span></div>
+          <div class="g2" style="margin-bottom:12px">
+            ${['demographics','footTraffic','parking','visibility','anchorProximity'].map(k=>{
+              const labels={demographics:'Demographics',footTraffic:'Foot Traffic',parking:'Parking',visibility:'Visibility / Signage',anchorProximity:'Anchor Proximity'};
+              return`<div>
+                <label class="label">${labels[k]}</label>
+                <input type="range" min="1" max="10" value="${p[k]||5}"
+                  oninput="reInp('re-${k}-${p.id}',this.value);this.nextElementSibling.textContent=this.value"
+                  style="width:100%;accent-color:#00904a">
+                <div style="text-align:right;font-size:12px;font-weight:700;color:#00904a">${p[k]||5}/10</div>
+              </div>`;
+            }).join('')}
+          </div>
+
+          <!-- Score breakdown -->
+          <div class="lsec" style="margin-top:4px">
+            <div class="lsec-title">Score Breakdown</div>
+            ${scoreBar('Rent Efficiency',sc.rentScore,25,scoreColor)}
+            ${scoreBar('Size Fit',sc.sizeScore,15,scoreColor)}
+            ${scoreBar('Demographics',sc.demoScore,20,scoreColor)}
+            ${scoreBar('Foot Traffic',sc.ftScore,20,scoreColor)}
+            ${scoreBar('Parking',sc.parkScore,10,scoreColor)}
+            ${scoreBar('Visibility',sc.visScore,5,scoreColor)}
+            ${scoreBar('Anchor Proximity',sc.anchorScore,5,scoreColor)}
+          </div>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div style="margin-top:12px">
+        <label class="label">Notes</label>
+        <textarea id="re-notes-${p.id}" rows="2"
+          onchange="reInp('re-notes-${p.id}',this.value)"
+          style="width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 10px;color:#0f172a;font-size:13px;outline:none;resize:vertical">${esc(p.notes||'')}</textarea>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Summary comparison table
+  const summaryRows=props.map(p=>{
+    const sc=scoreRE(p);
+    const gr=reGrade(sc.total);
+    const monthly=(p.baseRent+(p.cams||0))*p.sqft;
+    const linked=p.linkedUnitId?S.units.find(u=>u.id===p.linkedUnitId):null;
+    return`<tr style="background:#fff">
+      <td style="font-weight:600;color:#334155">${esc(p.address||'—')}</td>
+      <td>${p.sqft?.toLocaleString()||'—'}</td>
+      <td>$${((p.baseRent||0)+(p.cams||0)).toFixed(2)}</td>
+      <td style="font-weight:600">${$(monthly)}/mo</td>
+      <td><span style="background:${gr.bg};color:${gr.c};border-radius:6px;padding:3px 10px;font-weight:700;font-size:12px">${sc.total} ${gr.g}</span></td>
+      <td style="color:#64748b">${linked?esc(linked.name):'—'}</td>
+    </tr>`;
+  }).join('');
+
+  return`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px">Real Estate Analysis</div>
+        <div style="font-size:12px;color:#64748b;margin-top:2px">${props.length} propert${props.length===1?'y':'ies'} · Score = rent efficiency + size fit + location quality</div>
+      </div>
+      <button class="btn" onclick="reAdd()">+ Add Property</button>
+    </div>
+
+    ${props.length>1?`<div class="card" style="margin-bottom:16px">
+      <div class="card-title">Comparison</div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr>${['Address','Sq Ft','$/sqft','Monthly Rent','Score','Linked Location'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+        <tbody>${summaryRows}</tbody>
+      </table></div>
+    </div>`:''}
+
+    ${propCards}`;
+}
+
 // ─── Render ─────────────────────────────────────────────────────────────────
 function render(){
   const fid=document.activeElement?document.activeElement.id:null;
   const P2=port();
   const tRooms=S.units.reduce((s,u)=>s+u.rooms,0);
   const TABS=[
+    {id:'re',       label:'Real Estate'},
     {id:'setup',    label:'Setup'},
     {id:'locations',label:'Locations'},
     {id:'perf',     label:'Performance'},
@@ -975,6 +1195,7 @@ function render(){
     {id:'monthly',  label:'Monthly CF'},
   ];
   let body='';
+  if(S.tab==='re')        body=rRE();
   if(S.tab==='locations') body=rLoc();
   if(S.tab==='perf')      body=rPerf();
   if(S.tab==='setup')     body=rSetup();
@@ -1087,6 +1308,46 @@ function inp(id,val){
   render();ghSave();
 }
 
+
+function reAdd(){
+  if(!S.reProps)S.reProps=[];
+  const id=reNextId++;
+  S.reProps.push({id,address:'',sqft:2250,baseRent:2.75,cams:1.00,leaseTerm:5,linkedUnitId:null,
+    demographics:5,footTraffic:5,parking:5,visibility:5,anchorProximity:5,zoning:'Industrial Flex',notes:''});
+  render();save();
+}
+function reRemove(id){
+  S.reProps=(S.reProps||[]).filter(p=>p.id!==id);
+  render();save();
+}
+function reSyncRent(propId){
+  const p=(S.reProps||[]).find(x=>x.id===propId);
+  if(!p||!p.linkedUnitId)return;
+  const monthly=Math.round((p.baseRent+(p.cams||0))*p.sqft);
+  S.units=S.units.map(u=>u.id===p.linkedUnitId?{...u,rent:monthly}:u);
+  render();save();
+}
+function reInp(id,val){
+  if(!S.reProps)S.reProps=[];
+  const n=parseFloat(val);
+  const m=id.match(/^re-(addr|sqft|br|cams|term|zone|notes|link|demographics|footTraffic|parking|visibility|anchorProximity)-(\d+)$/);
+  if(!m)return;
+  const [,field,pidStr]=m;
+  const pid=parseInt(pidStr);
+  const keyMap={addr:'address',sqft:'sqft',br:'baseRent',cams:'cams',term:'leaseTerm',
+    zone:'zoning',notes:'notes',link:'linkedUnitId',
+    demographics:'demographics',footTraffic:'footTraffic',parking:'parking',
+    visibility:'visibility',anchorProximity:'anchorProximity'};
+  const key=keyMap[field];
+  if(!key)return;
+  S.reProps=S.reProps.map(p=>{
+    if(p.id!==pid)return p;
+    if(key==='address'||key==='zoning'||key==='notes')return{...p,[key]:String(val)};
+    if(key==='linkedUnitId')return{...p,[key]:val?parseInt(val):null};
+    return{...p,[key]:isNaN(n)?p[key]:n};
+  });
+  render();save();
+}
 function setTab(t){S.tab=t;render();}
 function setSel(id){S.sel=id;render();}
 function addUnit(){
