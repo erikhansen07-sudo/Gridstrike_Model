@@ -121,6 +121,34 @@ const DEFCOMP=Array.from({length:20},()=>({devFee:35000,revShare:10,equity:0}));
 const DEFEQTIERS=[{t:1,p:3},{t:10,p:6},{t:20,p:10}];
 // devFeeTiers: stores 1–t get this fee; t is the upper bound (last tier = ∞)
 const DEFDFTIERS=[{t:3,f:40000},{t:6,f:35000},{t:10,f:30000},{t:999,f:25000}];
+const DEF_SCORING={
+  // ── Dimension weights (should sum to 100) ───────────────────────────────
+  wRent:15, wSize:10, wDemo:15, wYoung:10, wFamily:15,
+  wFoot:15, wAnchor:10, wPark:5, wVis:5,
+  // ── Rent Efficiency ─────────────────────────────────────────────────────
+  rentMaxRatio:25,          // % rent-to-revenue where score = 0
+  // ── Size Fit ────────────────────────────────────────────────────────────
+  sizeMin:2000,             // ideal sqft floor
+  sizeMax:3500,             // ideal sqft ceiling
+  sizeDeductPer100:1,       // pts deducted per 100sqft outside range
+  // ── Income & Education ──────────────────────────────────────────────────
+  incomeHigh:100000,        // full income score threshold
+  incomeMid:80000,
+  incomeLow:60000,
+  incomeMin:40000,
+  incomeWeight:65,          // % weight vs education (rest = edu)
+  eduTarget:40,             // % bachelor's for full edu score
+  // ── Young Adults ────────────────────────────────────────────────────────
+  youngTarget:25,           // % 18-34 for full score
+  // ── Anchor Proximity ────────────────────────────────────────────────────
+  anchorHotel:2.0,          // pts per hotel
+  anchorEmployer:0.5,       // pts per major employer
+  anchorGym:0.3,            // pts per gym
+  // ── Foot Traffic ────────────────────────────────────────────────────────
+  footHigh:40,              // POI count for near-max score
+  footMid:20,
+  footLow:10,
+};
 const DEFAULTS={
   tab:'setup',sel:1,
   rev:{sessions:5,price:130,util:85,addon:8},
@@ -132,6 +160,7 @@ const DEFAULTS={
   distributions:[0,0,0,0,0],
   retentionRates:[10,10,10,10,10],
   capexPaybackRate:90,
+  scoring:{...DEF_SCORING},
   equityTiers:DEFEQTIERS.map(t=>({...t})),
   devFeeTiers:DEFDFTIERS.map(t=>({...t})),
   reProps:[
@@ -151,6 +180,7 @@ function migrateState(s){
   if(!s.capexMatrix)s.capexMatrix=DEFCAPEX.map(r=>[...r]);
   if(!s.opexMatrix)s.opexMatrix=DEFOPEX.map(r=>[...r]);
   if(!s.retentionRates)s.retentionRates=[10,10,10,10,10];
+  if(!s.scoring)s.scoring={...DEF_SCORING};
   if(!s.capexPaybackRate)s.capexPaybackRate=90;
   if(!s.equityTiers)s.equityTiers=DEFEQTIERS.map(t=>({...t}));
   if(!s.devFeeTiers)s.devFeeTiers=DEFDFTIERS.map(t=>({...t}));
@@ -324,30 +354,28 @@ function spaceCalc(sqft,baths){
   return{entertain,ingress,support,overhead,bathSqft,available,rooms,leftover};
 }
 function scoreRE(p){
+  const sc=Object.assign({},DEF_SCORING,S.scoring||{});
   const totalRentPerSqft=(p.baseRent||0)+(p.cams||0);
-  // Dynamic rent baseline: 10% rent-to-revenue ceiling using projected rooms
   const sp=spaceCalc(p.sqft,p.bathrooms||1);
   const projRooms=Math.max(1,sp.rooms);
   const r=S.rev;
   const monthlyRevenue=projRooms*r.sessions*r.price*(r.util/100)*365/12;
   const monthlyRent=totalRentPerSqft*(p.sqft||0);
   const rentToPct=monthlyRevenue>0?monthlyRent/monthlyRevenue:1;
-  // 15pts at 0%, 0pts at 25%+ rent-to-revenue
-  const rentScore=Math.max(0,Math.min(15,15*(1-rentToPct/0.25)));
+  const rentScore=Math.max(0,Math.min(sc.wRent,sc.wRent*(1-rentToPct/(sc.rentMaxRatio/100))));
   const rentCeilPsf=monthlyRevenue>0?monthlyRevenue*0.10/(p.sqft||1):0;
-  // Size fit (10pts): ideal 2000-3500sqft
   const sqft=p.sqft||0;
-  const sizeDiff=sqft<2000?2000-sqft:sqft>3500?sqft-3500:0;
-  const sizeScore=Math.max(0,10-sizeDiff/100);
-  const incomeEduScore=(p.demographics||5)/10*15;
-  const youngAdultScore=(p.youngAdult||5)/10*10;
-  const familyScore=(p.familyDensity||5)/10*15;
-  const ftScore=(p.footTraffic||5)/10*15;
-  const anchorScore=(p.anchorProximity||5)/10*10;
-  const parkScore=(p.parking||5)/10*5;
-  const visScore=(p.visibility||5)/10*5;
+  const sizeDiff=sqft<sc.sizeMin?sc.sizeMin-sqft:sqft>sc.sizeMax?sqft-sc.sizeMax:0;
+  const sizeScore=Math.max(0,sc.wSize-(sizeDiff/100)*sc.sizeDeductPer100);
+  const incomeEduScore=(p.demographics||5)/10*sc.wDemo;
+  const youngAdultScore=(p.youngAdult||5)/10*sc.wYoung;
+  const familyScore=(p.familyDensity||5)/10*sc.wFamily;
+  const ftScore=(p.footTraffic||5)/10*sc.wFoot;
+  const anchorScore=(p.anchorProximity||5)/10*sc.wAnchor;
+  const parkScore=(p.parking||5)/10*sc.wPark;
+  const visScore=(p.visibility||5)/10*sc.wVis;
   const total=rentScore+sizeScore+incomeEduScore+youngAdultScore+familyScore+ftScore+anchorScore+parkScore+visScore;
-  return{total:Math.round(Math.min(100,total)),rentScore,sizeScore,incomeEduScore,youngAdultScore,familyScore,ftScore,anchorScore,parkScore,visScore,rentToPct,rentCeilPsf,projRooms,monthlyRevenue};
+  return{total:Math.round(Math.min(100,total)),rentScore,sizeScore,incomeEduScore,youngAdultScore,familyScore,ftScore,anchorScore,parkScore,visScore,rentToPct,rentCeilPsf,projRooms,monthlyRevenue,sc};
 }
 function reGrade(score){
   if(score>=85)return{g:'A',c:'#15803d',bg:'#f0fdf4'};
@@ -647,7 +675,85 @@ function rSetup(){
           Add <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px">https://erikhansen07-sudo.github.io/*</code> as an allowed HTTP referrer.
         </div>
       </div>
+    </div>
+    ${rScoringConfig()}`;
+}
+
+function rScoringConfig(){
+  const sc=Object.assign({},DEF_SCORING,S.scoring||{});
+  const wTotal=sc.wRent+sc.wSize+sc.wDemo+sc.wYoung+sc.wFamily+sc.wFoot+sc.wAnchor+sc.wPark+sc.wVis;
+  const wOk=wTotal===100;
+  const scInp=(key,label,val,{min=0,max=100,step=1,pre='',suf='',hint=''}={})=>`
+    <div>
+      <label class="label">${label}${hint?`<span style="font-weight:400;color:#94a3b8;margin-left:4px">${hint}</span>`:''}</label>
+      <div class="iw">
+        ${pre?`<span class="pre">${pre}</span>`:''}
+        <input type="number" value="${val}" min="${min}" max="${max}" step="${step}"
+          class="${pre?'hp':''} ${suf?'hs':''}"
+          style="width:100%"
+          onchange="inp('sc-${key}',this.value)">
+        ${suf?`<span class="suf">${suf}</span>`:''}
+      </div>
     </div>`;
+  const dims=[
+    ['wRent','Rent Efficiency',sc.wRent],['wSize','Size Fit',sc.wSize],
+    ['wDemo','Income & Education',sc.wDemo],['wYoung','Young Adults 18–34',sc.wYoung],
+    ['wFamily','Family Density',sc.wFamily],['wFoot','Foot Traffic',sc.wFoot],
+    ['wAnchor','Anchor Proximity',sc.wAnchor],['wPark','Parking',sc.wPark],['wVis','Visibility/Signage',sc.wVis]
+  ];
+  return`<div class="card">
+    <div class="card-title">Real Estate Scoring Configuration</div>
+
+    <div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:10px">
+      Dimension Weights
+      <span style="font-weight:400;font-size:11px;color:#94a3b8;margin-left:8px">must sum to 100 — currently</span>
+      <span style="font-weight:700;color:${wOk?CY:'#dc2626'}">${wTotal}</span>
+      ${!wOk?`<span style="font-size:10px;color:#dc2626;font-weight:700"> ← adjust to reach 100</span>`:''}
+    </div>
+    <div class="g3" style="margin-bottom:18px">
+      ${dims.map(([k,lb,v])=>scInp(k,lb,v,{min:0,max:50,suf:'pts'})).join('')}
+    </div>
+
+    <div class="sdiv">Rent Efficiency</div>
+    <div class="g2" style="margin-bottom:14px">
+      ${scInp('rentMaxRatio','Max rent-to-revenue ratio',sc.rentMaxRatio,{min:5,max:50,suf:'%',hint:'(score = 0 above this)'})}
+    </div>
+
+    <div class="sdiv">Size Fit</div>
+    <div class="g3" style="margin-bottom:14px">
+      ${scInp('sizeMin','Ideal sqft (min)',sc.sizeMin,{min:500,max:5000,step:100,suf:'sqft'})}
+      ${scInp('sizeMax','Ideal sqft (max)',sc.sizeMax,{min:500,max:10000,step:100,suf:'sqft'})}
+      ${scInp('sizeDeductPer100','Deduction per 100sqft outside range',sc.sizeDeductPer100,{min:0.1,max:5,step:0.1,suf:'pts'})}
+    </div>
+
+    <div class="sdiv">Income &amp; Education</div>
+    <div class="g4" style="margin-bottom:14px">
+      ${scInp('incomeHigh','Full score threshold',sc.incomeHigh,{min:50000,max:300000,step:5000,pre:'$'})}
+      ${scInp('incomeMid','Mid threshold',sc.incomeMid,{min:30000,max:200000,step:5000,pre:'$'})}
+      ${scInp('incomeLow','Low threshold',sc.incomeLow,{min:20000,max:150000,step:5000,pre:'$'})}
+      ${scInp('incomeWeight','Income vs Edu split',sc.incomeWeight,{min:0,max:100,suf:'% income'})}
+    </div>
+    <div class="g2" style="margin-bottom:14px">
+      ${scInp('eduTarget',"Bachelor's+ full score",sc.eduTarget,{min:10,max:80,suf:'%'})}
+      ${scInp('youngTarget','Young Adults (18–34) full score',sc.youngTarget,{min:5,max:60,suf:'%'})}
+    </div>
+
+    <div class="sdiv">Anchor Proximity</div>
+    <div class="g3" style="margin-bottom:14px">
+      ${scInp('anchorHotel','Points per hotel',sc.anchorHotel,{min:0,max:5,step:0.1,suf:'pts'})}
+      ${scInp('anchorEmployer','Points per major employer',sc.anchorEmployer,{min:0,max:5,step:0.1,suf:'pts'})}
+      ${scInp('anchorGym','Points per gym',sc.anchorGym,{min:0,max:5,step:0.1,suf:'pts'})}
+    </div>
+
+    <div class="sdiv">Foot Traffic (POI count thresholds)</div>
+    <div class="g3" style="margin-bottom:14px">
+      ${scInp('footHigh','High POI count (→ 10/10)',sc.footHigh,{min:5,max:200,hint:'restaurants+shops'})}
+      ${scInp('footMid','Mid POI count (→ 8.5/10)',sc.footMid,{min:5,max:150})}
+      ${scInp('footLow','Low POI count (→ 7/10)',sc.footLow,{min:1,max:100})}
+    </div>
+
+    <button class="btn-sm" onclick="inp('sc-reset','1')" style="margin-top:4px">↺ Reset all to defaults</button>
+  </div>`;
 }
 
 // ─── Tab: Unit P&L ─────────────────────────────────────────────────────────
@@ -1241,43 +1347,46 @@ async function autoScoreRE(propId){
       return(d.places||[]);
     }
 
-    let poiLists={hotels:[],schools:[],restaurants:[],shops:[],gyms:[],offices:[]};
+    const sco=Object.assign({},DEF_SCORING,S.scoring||{});
+    const HOTEL_NOISE=/mobile home|trailer|rv park|estates|retreat|vacation|vrbo|airbnb|townhouse|single family|gated|bedrooms?|bed &|b&b cabin/i;
+    let poiLists={hotels:[],schools:[],restaurants:[],shops:[],gyms:[],employers:[]};
     if(gpKey){
       // Use Google Places — accurate, real-world data
       try{
-        const gpName=p=>p.displayName?.text||p.displayName||'Unknown';
+        const gpName=pl=>pl.displayName?.text||pl.displayName||'Unknown';
         const settled=await Promise.allSettled([
-          gpSearch(['hotel','motel','lodging'], 3218),
+          gpSearch(['hotel','motel'], 3218),                                          // stricter: no 'lodging'
           gpSearch(['school','primary_school','secondary_school','university'], 8047, 20),
-          gpSearch(['restaurant','cafe','fast_food_restaurant','bar'], 400, 20),
+          gpSearch(['restaurant','cafe','fast_food_restaurant','bar'], 1609, 20),      // 1 mile
           gpSearch(['store','shopping_mall','supermarket','convenience_store'], 400, 20),
           gpSearch(['gym','fitness_center'], 1600),
-          gpText('corporate office OR office park OR business park', 3218)
+          gpText('hospital OR university OR corporate campus OR headquarters OR employer', 3218)
         ]);
-        const [hotelRes,schoolRes,restRes,shopRes,gymRes,officeRes]=settled.map(s=>s.status==='fulfilled'?s.value:[]);
+        const [hotelRaw,schoolRes,restRes,shopRes,gymRes,employerRes]=settled.map(s=>s.status==='fulfilled'?s.value:[]);
+        // Filter out residential/vacation rentals from hotel results
+        const hotelRes=hotelRaw.filter(pl=>!HOTEL_NOISE.test(gpName(pl)));
         hotels=hotelRes.length;
         schools=schoolRes.length;
         restaurants=restRes.length;
         shops=shopRes.length;
         gyms=gymRes.length;
-        offices=officeRes.length;
+        offices=employerRes.length;
         poiLists={
           hotels:hotelRes.map(gpName),
           schools:schoolRes.map(gpName),
           restaurants:restRes.map(gpName),
           shops:shopRes.map(gpName),
           gyms:gymRes.map(gpName),
-          offices:officeRes.map(gpName)
+          employers:employerRes.map(gpName)
         };
-        parkingCount=3; // Default parking — Google doesn't rate parking lots well
-        entertainment=0;
-        competitors=0;
+        parkingCount=3;
+        entertainment=0; competitors=0;
         poiCount=restaurants+shops;
-        ftScore=poiCount>40?10:poiCount>20?8.5:poiCount>10?7:poiCount>4?5.5:poiCount>1?4:3;
-        anchorScore=Math.min(10,hotels*2.0+offices*0.5+gyms*0.3);
-        parkScore=5; // manual override encouraged
+        ftScore=poiCount>sco.footHigh?10:poiCount>sco.footMid?8.5:poiCount>sco.footLow?7:poiCount>4?5.5:poiCount>1?4:3;
+        anchorScore=Math.min(10,hotels*sco.anchorHotel+offices*sco.anchorEmployer+gyms*sco.anchorGym);
+        parkScore=5;
         poiSource='google';
-      }catch(e){console.warn('Google Places error, falling back to OSM',e);gpKey&&console.error(e);}
+      }catch(e){console.warn('Google Places error, falling back to OSM',e);}
     }
 
     if(poiSource==='none'){
@@ -1305,8 +1414,8 @@ async function autoScoreRE(propId){
           competitors=els.filter(e=>e.tags&&(e.tags.leisure==='escape_game'||e.tags.amenity==='amusement_arcade')).length;
           offices=els.filter(e=>e.tags&&(e.tags.office||e.tags.building==='office'||e.tags.landuse==='office'||e.tags.landuse==='commercial')).length;
           poiCount=restaurants+shops;
-          ftScore=poiCount>100?10:poiCount>60?8.5:poiCount>30?7:poiCount>15?5.5:poiCount>5?4:3;
-          anchorScore=Math.min(10,hotels*1.5+entertainment*1.0+offices*0.3);
+          ftScore=poiCount>sco.footHigh?10:poiCount>sco.footMid?8.5:poiCount>sco.footLow?7:poiCount>5?5.5:poiCount>1?4:3;
+          anchorScore=Math.min(10,hotels*sco.anchorHotel+entertainment*1.0+offices*sco.anchorEmployer);
           parkScore=parkingCount>5?10:parkingCount>2?8:parkingCount>0?6:3;
           poiSource='osm';
         }
@@ -1400,16 +1509,17 @@ function rRE(){
     const baths=p.bathrooms||1;
 
     // Unified scoring dimensions
+    const scfg=sc.sc||Object.assign({},DEF_SCORING,S.scoring||{});
     const dims=[
-      {label:'Rent Efficiency',    max:15,auto:true, k:null,              score:sc.rentScore},
-      {label:'Size Fit',           max:10,auto:true, k:null,              score:sc.sizeScore},
-      {label:'Income & Education', max:15,auto:true, k:'demographics',    score:sc.incomeEduScore},
-      {label:'Young Adults 18–34', max:10,auto:true, k:'youngAdult',      score:sc.youngAdultScore},
-      {label:'Family Density',     max:15,auto:true, k:'familyDensity',   score:sc.familyScore},
-      {label:'Foot Traffic',       max:15,auto:true, k:'footTraffic',     score:sc.ftScore},
-      {label:'Anchor Proximity',   max:10,auto:true, k:'anchorProximity', score:sc.anchorScore},
-      {label:'Parking',            max:5, auto:true, k:'parking',         score:sc.parkScore},
-      {label:'Visibility/Signage', max:5, auto:false,k:'visibility',      score:sc.visScore},
+      {label:'Rent Efficiency',    max:scfg.wRent,  auto:true, k:null,              score:sc.rentScore},
+      {label:'Size Fit',           max:scfg.wSize,  auto:true, k:null,              score:sc.sizeScore},
+      {label:'Income & Education', max:scfg.wDemo,  auto:true, k:'demographics',    score:sc.incomeEduScore},
+      {label:'Young Adults 18–34', max:scfg.wYoung, auto:true, k:'youngAdult',      score:sc.youngAdultScore},
+      {label:'Family Density',     max:scfg.wFamily,auto:true, k:'familyDensity',   score:sc.familyScore},
+      {label:'Foot Traffic',       max:scfg.wFoot,  auto:true, k:'footTraffic',     score:sc.ftScore},
+      {label:'Anchor Proximity',   max:scfg.wAnchor,auto:true, k:'anchorProximity', score:sc.anchorScore},
+      {label:'Parking',            max:scfg.wPark,  auto:true, k:'parking',         score:sc.parkScore},
+      {label:'Visibility/Signage', max:scfg.wVis,   auto:false,k:'visibility',      score:sc.visScore},
     ];
     const autoVals=(autoData&&autoData.autoVals)||{};
     const dimRow=d=>{
@@ -1502,7 +1612,7 @@ function rRE(){
             const td=(v,hi)=>`<td style="text-align:center;font-size:12px;font-weight:${hi?'700':'500'};color:${hi?'#0284c7':'#334155'};padding:3px 6px;border-bottom:1px solid #f1f5f9">${v}</td>`;
             return`<table style="width:100%;border-collapse:collapse">
               <thead><tr>
-                <${th} style="text-align:left">Metric</th>
+                <th style="text-align:left;font-size:10px;font-weight:700;color:#475569;padding:4px 6px;border-bottom:2px solid #e2e8f0">Metric</th>
                 ${th}3 mi</th>${th}4 mi</th>${th}5 mi</th>
               </tr></thead>
               <tbody>
@@ -1531,7 +1641,7 @@ function rRE(){
               ?`<span style="font-size:9px;background:#fef3c7;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:700">OpenStreetMap</span>`
               :`<span style="font-size:9px;background:#f1f5f9;color:#94a3b8;border-radius:3px;padding:1px 5px;font-weight:700">No data</span>`}
           </div>
-          ${[['🏨','hotels','Hotels (2mi)',autoData.hotels||0],['🏢','offices','Offices (2mi)',autoData.offices||0],['🍕','restaurants','Restaurants (400m)',autoData.restaurants||0],['🛍','shops','Shops (400m)',autoData.shops||0],['🏫','schools','Schools (5mi)',autoData.schools||0],['💪','gyms','Gyms (1mi)',autoData.gyms||0],['🎮','competitors','Competitors (800m)',autoData.competitors||0]].map(([ic,cat,lb,vl])=>{
+          ${[['🏨','hotels','Hotels (2mi)',autoData.hotels||0],['🏢','employers','Major Employers (2mi)',autoData.offices||0],['🍕','restaurants','Restaurants (1mi)',autoData.restaurants||0],['🛍','shops','Shops (400m)',autoData.shops||0],['🏫','schools','Schools (5mi)',autoData.schools||0],['💪','gyms','Gyms (1mi)',autoData.gyms||0],['🎮','competitors','Competitors (800m)',autoData.competitors||0]].map(([ic,cat,lb,vl])=>{
             const names=(autoData.poiLists&&autoData.poiLists[cat])||[];
             const exp=rePoiExpanded[p.id+'-'+cat]&&names.length>0;
             const hasNames=names.length>0;
@@ -1555,8 +1665,8 @@ function rRE(){
           <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0">Property Details</div>
           <div class="g3" style="margin-bottom:10px">
             ${ni2(`re-sqft-${p.id}`,'Sq Footage',p.sqft,{step:50,min:500})}
-            ${ni2(`re-br-${p.id}`,'Base Rent ($/sqft)',p.baseRent,{step:0.25,min:0})}
-            ${ni2(`re-cams-${p.id}`,'CAMS/NNN ($/sqft)',p.cams||0,{step:0.25,min:0})}
+            ${ni2(`re-br-${p.id}`,'Base Rent ($/sqft)',p.baseRent,{pre:'$',step:0.25,min:0})}
+            ${ni2(`re-cams-${p.id}`,'CAMS/NNN ($/sqft)',p.cams||0,{pre:'$',step:0.25,min:0})}
           </div>
           <div class="g2" style="margin-bottom:10px">
             <div>
@@ -1732,6 +1842,13 @@ function inp(id,val){
   if(rm[id]) {S.rev[rm[id]]=isNaN(n)?0:n;}
   else if(id==='capex-pr'){S.capexPaybackRate=isNaN(n)?90:Math.max(0,Math.min(100,n));}
   else if(id==='gplaces-key'){S.googlePlacesKey=String(val).trim();}
+  else if(id==='sc-reset'){S.scoring={...DEF_SCORING};}
+  else if(id.startsWith('sc-')){
+    const key=id.slice(3);
+    if(!S.scoring)S.scoring={...DEF_SCORING};
+    const strKeys=[''];  // all numeric
+    S.scoring[key]=strKeys.includes(key)?String(val):parseFloat(val)||0;
+  }
   else{
     const eqm=id.match(/^eq-(t|p)-(\d+)$/);
     if(eqm){
