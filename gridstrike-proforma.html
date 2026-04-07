@@ -1348,38 +1348,86 @@ async function autoScoreRE(propId){
 
     const sco=Object.assign({},DEF_SCORING,S.scoring||{});
     const HOTEL_NOISE=/mobile home|trailer|rv park|estates|retreat|vacation|vrbo|airbnb|townhouse|single family|gated|bedrooms?|bed &|b&b cabin/i;
-    let poiLists={hotels:[],schools:[],restaurants:[],shops:[],gyms:[],employers:[]};
+    let poiLists={hotels:[],employers:[],
+      restFamily:[],restBar:[],restFastFood:[],restCoffee:[],
+      shopRetail:[],grocery:[],
+      schoolElem:[],schoolMiddle:[],schoolHigh:[],schoolCollege:[],
+      gymFitness:[],gymYoga:[],gymCrossfit:[],gymDance:[],
+      competitors:[],wellness:[]};
     if(gpKey){
       // Use Google Places — accurate, real-world data
       try{
         const gpName=pl=>pl.displayName?.text||pl.displayName||'Unknown';
         const settled=await Promise.allSettled([
-          gpSearch(['hotel','motel'], 3218),                                          // stricter: no 'lodging'
-          gpSearch(['school','primary_school','secondary_school','university'], 8047, 20),
-          gpSearch(['restaurant','cafe','fast_food_restaurant','bar'], 1609, 20),      // 1 mile
-          gpSearch(['store','shopping_mall','supermarket','convenience_store'], 400, 20),
+          // 0: Hotels
+          gpSearch(['hotel','motel'], 3218),
+          // 1: Major Employers (text search)
+          gpText('hospital OR university OR corporate campus OR headquarters OR major employer', 3218),
+          // 2: Family / sit-down restaurants
+          gpSearch(['restaurant'], 1609),
+          // 3: Bars & nightlife
+          gpSearch(['bar','night_club'], 1609),
+          // 4: Fast food / QSR
+          gpSearch(['fast_food_restaurant'], 1609),
+          // 5: Coffee shops
+          gpSearch(['cafe','coffee_shop'], 1609),
+          // 6: Retail shopping (clothing, boutiques, specialty)
+          gpSearch(['clothing_store','shoe_store','jewelry_store','gift_shop','book_store','sporting_goods_store','toy_store','electronics_store','shopping_mall','department_store'], 800),
+          // 7: Grocery stores
+          gpSearch(['supermarket','grocery_store'], 3218),
+          // 8: Elementary schools
+          gpSearch(['primary_school'], 8047),
+          // 9: Middle schools
+          gpText('middle school OR junior high school', 8047),
+          // 10: High schools
+          gpSearch(['secondary_school'], 8047),
+          // 11: Colleges & universities
+          gpSearch(['university'], 8047),
+          // 12: Gyms & fitness centers
           gpSearch(['gym','fitness_center'], 1600),
-          gpText('hospital OR university OR corporate campus OR headquarters OR employer', 3218)
+          // 13: Yoga & pilates
+          gpText('yoga studio OR pilates studio', 1600),
+          // 14: CrossFit
+          gpText('CrossFit', 1600),
+          // 15: Dance & martial arts studios
+          gpText('dance studio OR dance academy OR martial arts OR karate', 1600),
+          // 16: Entertainment competitors
+          gpText('trampoline park OR SkyZone OR arcade OR laser tag OR go-kart OR escape room OR ninja gym OR axe throwing OR mini golf OR bowling', 5000),
+          // 17: Personal wellness
+          gpSearch(['beauty_salon','hair_care','spa','nail_salon'], 1600),
         ]);
-        const [hotelRaw,schoolRes,restRes,shopRes,gymRes,employerRes]=settled.map(s=>s.status==='fulfilled'?s.value:[]);
-        // Filter out residential/vacation rentals from hotel results
-        const hotelRes=hotelRaw.filter(pl=>!HOTEL_NOISE.test(gpName(pl)));
+        const res=settled.map(s=>s.status==='fulfilled'?s.value:[]);
+        const gpN=pl=>gpName(pl);
+        const hotelRes=res[0].filter(pl=>!HOTEL_NOISE.test(gpN(pl)));
         hotels=hotelRes.length;
-        schools=schoolRes.length;
-        restaurants=restRes.length;
-        shops=shopRes.length;
-        gyms=gymRes.length;
-        offices=employerRes.length;
+        offices=res[1].length;
+        const totalRestaurants=res[2].length+res[3].length+res[4].length+res[5].length;
+        restaurants=totalRestaurants;
+        shops=res[6].length;
+        schools=res[8].length+res[9].length+res[10].length+res[11].length;
+        gyms=res[12].length+res[13].length+res[14].length+res[15].length;
+        competitors=res[16].length;
         poiLists={
-          hotels:hotelRes.map(gpName),
-          schools:schoolRes.map(gpName),
-          restaurants:restRes.map(gpName),
-          shops:shopRes.map(gpName),
-          gyms:gymRes.map(gpName),
-          employers:employerRes.map(gpName)
+          hotels:hotelRes.map(gpN),
+          employers:res[1].map(gpN),
+          restFamily:res[2].map(gpN),
+          restBar:res[3].map(gpN),
+          restFastFood:res[4].map(gpN),
+          restCoffee:res[5].map(gpN),
+          shopRetail:res[6].map(gpN),
+          grocery:res[7].map(gpN),
+          schoolElem:res[8].map(gpN),
+          schoolMiddle:res[9].map(gpN),
+          schoolHigh:res[10].map(gpN),
+          schoolCollege:res[11].map(gpN),
+          gymFitness:res[12].map(gpN),
+          gymYoga:res[13].map(gpN),
+          gymCrossfit:res[14].map(gpN),
+          gymDance:res[15].map(gpN),
+          competitors:res[16].map(gpN),
+          wellness:res[17].map(gpN),
         };
         parkingCount=3;
-        entertainment=0; competitors=0;
         poiCount=restaurants+shops;
         ftScore=poiCount>sco.footHigh?10:poiCount>sco.footMid?8.5:poiCount>sco.footLow?7:poiCount>4?5.5:poiCount>1?4:3;
         anchorScore=Math.min(10,hotels*sco.anchorHotel+offices*sco.anchorEmployer+gyms*sco.anchorGym);
@@ -1583,77 +1631,52 @@ function rRE(){
       <!-- GENERAL DEMOGRAPHICS -->
       ${autoData?`
       <div class="sdiv" style="margin-top:14px">General Demographics</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-            <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Trade Area Demographics</span>
-            <span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Census Tracts</span>
-          </div>
-          ${(()=>{
-            const ta=autoData.tradeArea||{};
-            const r3=ta.mi3,r4=ta.mi4,r5=ta.mi5;
-            const fmt=(v,type)=>{
-              if(v==null||v===0)return'—';
-              if(type==='$')return'$'+Math.round(v/1000)+'k';
-              if(type==='%')return v+'%';
-              if(type==='pop')return v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?Math.round(v/1000)+'k':v;
-              return v;
-            };
-            const rows=[
-              ['💰','Median Income','$','medIncome'],
-              ['👤','Median Age','','medAge'],
-              ['👥','Population','pop','population'],
-              ['🎓',"Bachelor's+",'%','pctBachelors'],
-              ['🧑','Ages 18–34','%','pctYoungAdult'],
-              ['👶','Under 18','%','pctUnder18'],
-            ];
-            const th='<th style="text-align:center;font-size:10px;font-weight:700;color:#475569;padding:4px 6px;border-bottom:2px solid #e2e8f0">';
-            const td=(v,hi)=>`<td style="text-align:center;font-size:12px;font-weight:${hi?'700':'500'};color:${hi?'#0284c7':'#334155'};padding:3px 6px;border-bottom:1px solid #f1f5f9">${v}</td>`;
-            return`<table style="width:100%;border-collapse:collapse">
-              <thead><tr>
-                <th style="text-align:left;font-size:10px;font-weight:700;color:#475569;padding:4px 6px;border-bottom:2px solid #e2e8f0">Metric</th>
-                ${th}3 mi</th>${th}4 mi</th>${th}5 mi</th>
-              </tr></thead>
-              <tbody>
-                ${rows.map(([ic,lb,type,key])=>`<tr>
-                  <td style="font-size:11px;color:#64748b;padding:3px 4px;border-bottom:1px solid #f1f5f9">${ic} ${lb}</td>
-                  ${td(fmt(r3?.[key],type),true)}
-                  ${td(fmt(r4?.[key],type),false)}
-                  ${td(fmt(r5?.[key],type),false)}
-                </tr>`).join('')}
-                <tr style="background:#f0f9ff">
-                  <td style="font-size:10px;color:#94a3b8;padding:3px 4px;font-style:italic">Census tracts</td>
-                  ${td(r3?.tractCount??'—',false)}
-                  ${td(r4?.tractCount??'—',false)}
-                  ${td(r5?.tractCount??'—',false)}
-                </tr>
-              </tbody>
-            </table>`;
-          })()}
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Trade Area Demographics</span>
+          <span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Census Tracts</span>
         </div>
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-            <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Nearby POIs</span>
-            ${autoData.poiSource==='google'
-              ?`<span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Google Places</span>`
-              :autoData.poiSource==='osm'
-              ?`<span style="font-size:9px;background:#fef3c7;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:700">OpenStreetMap</span>`
-              :`<span style="font-size:9px;background:#f1f5f9;color:#94a3b8;border-radius:3px;padding:1px 5px;font-weight:700">No data</span>`}
-          </div>
-          ${[['🏨','hotels','Hotels (2mi)',autoData.hotels||0],['🏢','employers','Major Employers (2mi)',autoData.offices||0],['🍕','restaurants','Restaurants (1mi)',autoData.restaurants||0],['🛍','shops','Shops (400m)',autoData.shops||0],['🏫','schools','Schools (5mi)',autoData.schools||0],['💪','gyms','Gyms (1mi)',autoData.gyms||0],['🎮','competitors','Competitors (800m)',autoData.competitors||0]].map(([ic,cat,lb,vl])=>{
-            const names=(autoData.poiLists&&autoData.poiLists[cat])||[];
-            const exp=rePoiExpanded[p.id+'-'+cat]&&names.length>0;
-            const hasNames=names.length>0;
-            return`<div style="border-bottom:1px solid #f1f5f9">
-              <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0;cursor:${hasNames?'pointer':'default'}"
-                ${hasNames?`onclick="reTogglePoi(${p.id},'${cat}')"`:''}>
-                <span style="color:#64748b">${ic} ${lb}${hasNames?`<span style="font-size:9px;color:#94a3b8;margin-left:4px">${exp?'▲':'▼'}</span>`:''}</span>
-                <strong style="color:#334155">${vl}</strong>
-              </div>
-              ${exp?`<div style="padding:4px 0 6px 16px">${names.map(n=>`<div style="font-size:11px;color:#475569;padding:1px 0;border-bottom:1px solid #f8fafc">${n}</div>`).join('')}</div>`:''}
-            </div>`;
-          }).join('')}
-        </div>
+        ${(()=>{
+          const ta=autoData.tradeArea||{};
+          const r3=ta.mi3,r4=ta.mi4,r5=ta.mi5;
+          const fmt=(v,type)=>{
+            if(v==null||v===0)return'—';
+            if(type==='$')return'$'+Math.round(v/1000)+'k';
+            if(type==='%')return v+'%';
+            if(type==='pop')return v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?Math.round(v/1000)+'k':v;
+            return v;
+          };
+          const rows=[
+            ['💰','Median Income','$','medIncome'],
+            ['👤','Median Age','','medAge'],
+            ['👥','Population','pop','population'],
+            ['🎓',"Bachelor's+",'%','pctBachelors'],
+            ['🧑','Ages 18–34','%','pctYoungAdult'],
+            ['👶','Under 18','%','pctUnder18'],
+          ];
+          const th='<th style="text-align:center;font-size:10px;font-weight:700;color:#475569;padding:4px 6px;border-bottom:2px solid #e2e8f0">';
+          const td=(v,hi)=>`<td style="text-align:center;font-size:12px;font-weight:${hi?'700':'500'};color:${hi?'#0284c7':'#334155'};padding:3px 6px;border-bottom:1px solid #f1f5f9">${v}</td>`;
+          return`<table style="width:100%;border-collapse:collapse">
+            <thead><tr>
+              <th style="text-align:left;font-size:10px;font-weight:700;color:#475569;padding:4px 6px;border-bottom:2px solid #e2e8f0">Metric</th>
+              ${th}3 mi</th>${th}4 mi</th>${th}5 mi</th>
+            </tr></thead>
+            <tbody>
+              ${rows.map(([ic,lb,type,key])=>`<tr>
+                <td style="font-size:11px;color:#64748b;padding:3px 4px;border-bottom:1px solid #f1f5f9">${ic} ${lb}</td>
+                ${td(fmt(r3?.[key],type),true)}
+                ${td(fmt(r4?.[key],type),false)}
+                ${td(fmt(r5?.[key],type),false)}
+              </tr>`).join('')}
+              <tr style="background:#f0f9ff">
+                <td style="font-size:10px;color:#94a3b8;padding:3px 4px;font-style:italic">Census tracts</td>
+                ${td(r3?.tractCount??'—',false)}
+                ${td(r4?.tractCount??'—',false)}
+                ${td(r5?.tractCount??'—',false)}
+              </tr>
+            </tbody>
+          </table>`;
+        })()}
       </div>`:''}
 
       <!-- MAIN GRID -->
@@ -1725,8 +1748,9 @@ function rRE(){
           </div>
         </div>
 
-        <!-- RIGHT: Unified Score Analysis -->
+        <!-- RIGHT: Score Analysis + POIs -->
         <div>
+          <!-- Score Analysis -->
           <div class="sdiv" style="margin-top:0;border-top:none;padding-top:0">Score Analysis
             <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:#94a3b8"> — drag sliders to override</span>
           </div>
@@ -1735,9 +1759,64 @@ function rRE(){
             <span style="font-size:12px;font-weight:700;color:#334155">TOTAL</span>
             <span style="font-size:20px;font-weight:900;color:${scoreColor}">${sc.total} / 100 · ${gr.g}</span>
           </div>
-          <div style="height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden">
+          <div style="height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;margin-bottom:16px">
             <div style="height:100%;width:${sc.total}%;background:${scoreColor};border-radius:4px;transition:width 0.3s"></div>
           </div>
+
+          <!-- Nearby POIs -->
+          ${autoData?`<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+              <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Nearby POIs</span>
+              ${autoData.poiSource==='google'
+                ?`<span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Google Places</span>`
+                :autoData.poiSource==='osm'
+                ?`<span style="font-size:9px;background:#fef3c7;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:700">OpenStreetMap</span>`
+                :`<span style="font-size:9px;background:#f1f5f9;color:#94a3b8;border-radius:3px;padding:1px 5px;font-weight:700">No data</span>`}
+            </div>
+            ${(()=>{
+              const pl=autoData.poiLists||{};
+              const cap=20;
+              const poiRow=(ic,cat,lb,names)=>{
+                const n=names.length;
+                const exp=rePoiExpanded[p.id+'-'+cat]&&n>0;
+                return`<div style="border-bottom:1px solid #f1f5f9">
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0;cursor:${n?'pointer':'default'}"
+                    ${n?`onclick="reTogglePoi(${p.id},'${cat}')"`:''}>
+                    <span style="color:#64748b">${ic} ${lb}${n?`<span style="font-size:9px;color:#94a3b8;margin-left:4px">${exp?'▲':'▼'}</span>`:''}</span>
+                    <strong style="color:#334155">${n>0&&n>=cap?'20+':n}</strong>
+                  </div>
+                  ${exp?`<div style="padding:4px 0 6px 16px">${names.map(nm=>`<div style="font-size:11px;color:#475569;padding:1px 0;border-bottom:1px solid #f8fafc">${nm}</div>`).join('')}</div>`:''}
+                </div>`;
+              };
+              const grpHdr=lbl=>`<div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;padding:6px 0 2px;margin-top:2px">${lbl}</div>`;
+              return[
+                grpHdr('Anchors'),
+                poiRow('🏨','hotels','Hotels (2mi)',pl.hotels||[]),
+                poiRow('🏢','employers','Major Employers (2mi)',pl.employers||[]),
+                grpHdr('Restaurants & Bars (1mi)'),
+                poiRow('🍽','restFamily','Family / Sit-Down',pl.restFamily||[]),
+                poiRow('🍔','restFastFood','Fast Food / QSR',pl.restFastFood||[]),
+                poiRow('☕','restCoffee','Coffee Shops',pl.restCoffee||[]),
+                poiRow('🍺','restBar','Bars & Nightlife',pl.restBar||[]),
+                grpHdr('Shopping (800m)'),
+                poiRow('🛍','shopRetail','Retail Shopping',pl.shopRetail||[]),
+                poiRow('🛒','grocery','Grocery Stores (2mi)',pl.grocery||[]),
+                grpHdr('Schools (5mi)'),
+                poiRow('🏫','schoolElem','Elementary',pl.schoolElem||[]),
+                poiRow('📚','schoolMiddle','Middle School',pl.schoolMiddle||[]),
+                poiRow('🎓','schoolHigh','High School',pl.schoolHigh||[]),
+                poiRow('🏛','schoolCollege','College / University',pl.schoolCollege||[]),
+                grpHdr('Fitness & Wellness (1mi)'),
+                poiRow('💪','gymFitness','Gyms & Fitness',pl.gymFitness||[]),
+                poiRow('🧘','gymYoga','Yoga & Pilates',pl.gymYoga||[]),
+                poiRow('🏋','gymCrossfit','CrossFit',pl.gymCrossfit||[]),
+                poiRow('💃','gymDance','Dance & Martial Arts',pl.gymDance||[]),
+                poiRow('💅','wellness','Personal Wellness',pl.wellness||[]),
+                grpHdr('Competition (3mi)'),
+                poiRow('🎮','competitors','Entertainment Competitors',pl.competitors||[]),
+              ].join('');
+            })()}
+          </div>`:''}
         </div>
       </div>
 
