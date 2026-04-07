@@ -1069,16 +1069,11 @@ async function autoScoreRE(propId){
     const lon=parseFloat(nom.lon);
     const displayAddr=nom.display_name;
 
-    // ── Step 2: Census Tract via FCC Area API (CORS-friendly) ───────────────
-    const fccUrl=`https://geo.fcc.gov/api/census/block/find?latitude=${lat}&longitude=${lon}&format=json`;
-    const fccRes=await fetch(fccUrl);
-    const fccJson=await fccRes.json();
-    if(!fccJson?.County?.FIPS)throw new Error('Could not resolve census tract from coordinates.');
-    const stFips=fccJson.State.FIPS;
-    const coFips=fccJson.County.FIPS.slice(2,5);
-    const trFips=fccJson.Block.FIPS.slice(5,11);
+    // ── Step 2: ZIP code from Nominatim response (no extra API needed) ───────
+    const zip=nom.address?.postcode?.split('-')[0];
+    if(!zip)throw new Error('Could not determine ZIP code from address. Add a ZIP code and retry.');
 
-    // ── Step 3: Census ACS5 — demographics + psychographics ──────────────────
+    // ── Step 3: Census ACS5 at ZIP/ZCTA level — no tract lookup needed ───────
     // B19013_001E = median HH income
     // B01002_001E = median age, B01003_001E = total pop
     // B15003_022E = bachelor's degree (25+), B15003_001E = total 25+ pop
@@ -1086,7 +1081,7 @@ async function autoScoreRE(propId){
     // B11001_001E = total households
     // Age groups for 18-34: B01001_007..010 (M) + B01001_031..034 (F)
     const censusVars='B19013_001E,B01002_001E,B01003_001E,B15003_022E,B15003_023E,B15003_024E,B15003_025E,B15003_001E,B11001_001E,B09019_003E,B01001_007E,B01001_008E,B01001_009E,B01001_010E,B01001_031E,B01001_032E,B01001_033E,B01001_034E';
-    const censusUrl=`https://api.census.gov/data/2023/acs/acs5?get=${censusVars}&for=tract:${trFips}&in=state:${stFips}%20county:${coFips}`;
+    const censusUrl=`https://api.census.gov/data/2023/acs/acs5?get=${censusVars}&for=zip%20code%20tabulation%20area:${zip}`;
     const censusRes=await fetch(censusUrl);
     const censusJson=await censusRes.json();
     const ch=censusJson[0]; const cd=censusJson[1];
