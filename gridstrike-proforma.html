@@ -520,8 +520,14 @@ function rLoc(){
 
 // ─── Tab: Performance ───────────────────────────────────────────────────────
 function rPerf(){
-  if(!S.units.length)return`<div class="card">No locations defined yet.</div>`;
-  return S.units.map((u,idx)=>{
+  const activePerfIds=new Set((S.reProps||[]).filter(p=>p.status==='active'&&p.linkedUnitId).map(p=>p.linkedUnitId));
+  const perfUnits=S.units.filter(u=>activePerfIds.has(u.id));
+  if(!perfUnits.length)return`<div class="card" style="text-align:center;padding:40px;color:#94a3b8">
+    <div style="font-size:32px;margin-bottom:12px">📍</div>
+    <div style="font-size:16px;font-weight:700;color:#334155;margin-bottom:6px">No Active Locations</div>
+    <div style="font-size:13px">Set a location to <strong>Active</strong> on the Real Estate tab to configure its performance curve here.</div>
+  </div>`;
+  return perfUnits.map((u,idx)=>{
     const curve=u.curve||'flat';
     const mature=cu(u,1,idx);
     const baseMonthly=mature.rev/12;
@@ -779,7 +785,12 @@ function rScoringConfig(){
 // ─── Tab: Unit P&L ─────────────────────────────────────────────────────────
 function rUnits(){
   const activeIds=new Set((S.reProps||[]).filter(p=>p.status==='active'&&p.linkedUnitId).map(p=>p.linkedUnitId));
-  const allUnits=S.units.filter(u=>activeIds.size===0||activeIds.has(u.id));
+  const allUnits=S.units.filter(u=>activeIds.has(u.id));
+  if(!allUnits.length)return`<div class="card" style="text-align:center;padding:40px;color:#94a3b8">
+    <div style="font-size:32px;margin-bottom:12px">📍</div>
+    <div style="font-size:16px;font-weight:700;color:#334155;margin-bottom:6px">No Active Locations</div>
+    <div style="font-size:13px">Go to the <strong>Real Estate</strong> tab, open a location, and set its status to <strong>Active</strong> to include it in the financial model.</div>
+  </div>`;
   const all=allUnits.map((u,i)=>({...u,c:cu(u,1*annualCurveMult(u,4),i)}));
   const selIdx=Math.max(0,allUnits.findIndex(u=>u.id===S.sel));
   const sel=all[selIdx]||all[0];
