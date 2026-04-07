@@ -627,6 +627,26 @@ function rSetup(){
         ${ni('capex-pr','CAPEX Payback Rate',S.capexPaybackRate||90,{suf:'%',step:5,min:0,max:100})}
       </div>
       <div class="hint" style="margin-top:12px">Each month, this % of that store's monthly EBITDA is diverted to its own CAPEX balance until paid off. Cash Flow table shows the annualized total (monthly × 12).</div>
+    </div>
+    <div class="card">
+      <div class="card-title">API Integrations</div>
+      <div style="max-width:520px">
+        <div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Google Places API Key</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="password" id="gplaces-key" value="${esc(S.googlePlacesKey||'')}"
+            placeholder="AIza..."
+            style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace"
+            onchange="inp('gplaces-key',this.value.trim())">
+          <span style="font-size:12px;color:${S.googlePlacesKey?'#16a34a':'#94a3b8'};font-weight:600;white-space:nowrap">
+            ${S.googlePlacesKey?'✓ Active':'Not set'}
+          </span>
+        </div>
+        <div class="hint" style="margin-top:8px">
+          When set, Auto-Score uses <strong>Google Places</strong> for hotels, schools, restaurants and shops — much more accurate than OpenStreetMap.
+          Get a free key at <a href="https://console.cloud.google.com" target="_blank" style="color:${CY}">console.cloud.google.com</a> → Enable "Places API (New)".
+          Add <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px">https://erikhansen07-sudo.github.io/*</code> as an allowed HTTP referrer.
+        </div>
+      </div>
     </div>`;
 }
 
@@ -1141,39 +1161,87 @@ async function autoScoreRE(propId){
     // Young adult score (0-10): >25% = excellent
     const youngAdultScore=Math.min(10,pctYoungAdult/2.5);
 
-    // ── Step 4: OSM Overpass — optional, fails gracefully ───────────────────
+    // ── Step 4: POI data — Google Places if key set, else OSM Overpass ────────
     let hotels=0,restaurants=0,shops=0,parkingCount=0,schools=0,gyms=0,competitors=0,offices=0,poiCount=0,entertainment=0;
     let ftScore=5, anchorScore=5, parkScore=5;
-    let osmOk=false;
-    try{
-      const overpassServers=['https://overpass.kumi.systems/api/interpreter','https://overpass-api.de/api/interpreter'];
-      const osmQuery=`[out:json][timeout:35];\n(\n  node(around:3218,${lat},${lon})[tourism=hotel];\n  way(around:3218,${lat},${lon})[tourism=hotel];\n  relation(around:3218,${lat},${lon})[tourism=hotel];\n  node(around:3218,${lat},${lon})[tourism=motel];\n  way(around:3218,${lat},${lon})[tourism=motel];\n  node(around:3218,${lat},${lon})[amenity=hotel];\n  way(around:3218,${lat},${lon})[amenity=hotel];\n  node(around:3218,${lat},${lon})[building=hotel];\n  way(around:3218,${lat},${lon})[building=hotel];\n  node(around:3218,${lat},${lon})[office];\n  way(around:3218,${lat},${lon})[office];\n  relation(around:3218,${lat},${lon})[office];\n  way(around:3218,${lat},${lon})[building=office];\n  way(around:3218,${lat},${lon})[landuse=office];\n  way(around:3218,${lat},${lon})[landuse=commercial];\n  node(around:400,${lat},${lon})[amenity=restaurant];\n  node(around:400,${lat},${lon})[amenity=cafe];\n  node(around:400,${lat},${lon})[amenity=fast_food];\n  node(around:400,${lat},${lon})[shop];\n  node(around:400,${lat},${lon})[amenity=parking];\n  way(around:400,${lat},${lon})[amenity=parking];\n  node(around:8047,${lat},${lon})[amenity=school];\n  way(around:8047,${lat},${lon})[amenity=school];\n  node(around:800,${lat},${lon})[leisure=fitness_centre];\n  node(around:800,${lat},${lon})[leisure=escape_game];\n  node(around:800,${lat},${lon})[amenity=amusement_arcade];\n);\nout tags;`;
-      let osmText='';
-      for(const url of overpassServers){
-        try{
-          const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(osmQuery)});
-          osmText=await r.text();
-          if(!osmText.trim().startsWith('<'))break;
-        }catch(e){osmText='';}
-      }
-      if(osmText&&!osmText.trim().startsWith('<')){
-        const els=JSON.parse(osmText).elements||[];
-        hotels=els.filter(e=>e.tags&&(e.tags.tourism==='hotel'||e.tags.tourism==='motel'||e.tags.amenity==='hotel'||e.tags.building==='hotel')).length;
-        entertainment=els.filter(e=>e.tags&&(e.tags.leisure||e.tags.amenity==='cinema')).length;
-        restaurants=els.filter(e=>e.tags&&['restaurant','cafe','fast_food'].includes(e.tags.amenity)).length;
-        shops=els.filter(e=>e.tags&&e.tags.shop).length;
-        parkingCount=els.filter(e=>e.tags&&e.tags.amenity==='parking').length;
-        schools=els.filter(e=>e.tags&&e.tags.amenity==='school').length;
-        gyms=els.filter(e=>e.tags&&e.tags.leisure==='fitness_centre').length;
-        competitors=els.filter(e=>e.tags&&(e.tags.leisure==='escape_game'||e.tags.amenity==='amusement_arcade')).length;
-        offices=els.filter(e=>e.tags&&(e.tags.office||e.tags.building==='office'||e.tags.landuse==='office'||e.tags.landuse==='commercial')).length;
+    let poiSource='none';
+
+    const gpKey=S.googlePlacesKey||'';
+
+    // Helper: Google Places Nearby Search (New API)
+    async function gpSearch(types, radiusM, maxCount=20){
+      const body={includedTypes:types,maxResultCount:Math.min(20,maxCount),
+        locationRestriction:{circle:{center:{latitude:lat,longitude:lon},radius:radiusM}}};
+      const r=await fetch('https://places.googleapis.com/v1/places:searchNearby',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-Goog-Api-Key':gpKey,
+          'X-Goog-FieldMask':'places.id,places.types,places.displayName'},
+        body:JSON.stringify(body)
+      });
+      if(!r.ok)throw new Error('Places API '+r.status);
+      const d=await r.json();
+      return(d.places||[]);
+    }
+
+    if(gpKey){
+      // Use Google Places — accurate, real-world data
+      try{
+        const [hotelRes,schoolRes,restRes,shopRes,gymRes] = await Promise.all([
+          gpSearch(['hotel','motel','lodging'], 3218),
+          gpSearch(['school','primary_school','secondary_school','university'], 8047, 20),
+          gpSearch(['restaurant','cafe','fast_food_restaurant','bar'], 400, 20),
+          gpSearch(['store','shopping_mall','supermarket','convenience_store'], 400, 20),
+          gpSearch(['gym','fitness_center'], 1600)
+        ]);
+        hotels=hotelRes.length;
+        schools=schoolRes.length;
+        restaurants=restRes.length;
+        shops=shopRes.length;
+        gyms=gymRes.length;
+        offices=0; // Places API doesn't have a reliable office type — kept manual
+        parkingCount=3; // Default parking — Google doesn't rate parking lots well
+        entertainment=0;
+        competitors=0;
         poiCount=restaurants+shops;
-        ftScore=poiCount>100?10:poiCount>60?8.5:poiCount>30?7:poiCount>15?5.5:poiCount>5?4:3;
-        anchorScore=Math.min(10,hotels*1.5+entertainment*1.0+offices*0.3);
-        parkScore=parkingCount>5?10:parkingCount>2?8:parkingCount>0?6:3;
-        osmOk=true;
-      }
-    }catch(e){console.warn('Overpass unavailable, using defaults',e);}
+        ftScore=poiCount>40?10:poiCount>20?8.5:poiCount>10?7:poiCount>4?5.5:poiCount>1?4:3;
+        anchorScore=Math.min(10,hotels*2.0+gyms*0.5);
+        parkScore=5; // manual override encouraged
+        poiSource='google';
+      }catch(e){console.warn('Google Places error, falling back to OSM',e);gpKey&&console.error(e);}
+    }
+
+    if(poiSource==='none'){
+      // Fallback: OSM Overpass
+      try{
+        const overpassServers=['https://overpass.kumi.systems/api/interpreter','https://overpass-api.de/api/interpreter'];
+        const osmQuery=`[out:json][timeout:35];\n(\n  node(around:3218,${lat},${lon})[tourism=hotel];\n  way(around:3218,${lat},${lon})[tourism=hotel];\n  relation(around:3218,${lat},${lon})[tourism=hotel];\n  node(around:3218,${lat},${lon})[tourism=motel];\n  way(around:3218,${lat},${lon})[tourism=motel];\n  node(around:3218,${lat},${lon})[amenity=hotel];\n  way(around:3218,${lat},${lon})[amenity=hotel];\n  node(around:3218,${lat},${lon})[building=hotel];\n  way(around:3218,${lat},${lon})[building=hotel];\n  node(around:3218,${lat},${lon})[office];\n  way(around:3218,${lat},${lon})[office];\n  relation(around:3218,${lat},${lon})[office];\n  way(around:3218,${lat},${lon})[building=office];\n  way(around:3218,${lat},${lon})[landuse=office];\n  way(around:3218,${lat},${lon})[landuse=commercial];\n  node(around:400,${lat},${lon})[amenity=restaurant];\n  node(around:400,${lat},${lon})[amenity=cafe];\n  node(around:400,${lat},${lon})[amenity=fast_food];\n  node(around:400,${lat},${lon})[shop];\n  node(around:400,${lat},${lon})[amenity=parking];\n  way(around:400,${lat},${lon})[amenity=parking];\n  node(around:8047,${lat},${lon})[amenity=school];\n  way(around:8047,${lat},${lon})[amenity=school];\n  node(around:800,${lat},${lon})[leisure=fitness_centre];\n  node(around:800,${lat},${lon})[leisure=escape_game];\n  node(around:800,${lat},${lon})[amenity=amusement_arcade];\n);\nout tags;`;
+        let osmText='';
+        for(const url of overpassServers){
+          try{
+            const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(osmQuery)});
+            osmText=await r.text();
+            if(!osmText.trim().startsWith('<'))break;
+          }catch(e){osmText='';}
+        }
+        if(osmText&&!osmText.trim().startsWith('<')){
+          const els=JSON.parse(osmText).elements||[];
+          hotels=els.filter(e=>e.tags&&(e.tags.tourism==='hotel'||e.tags.tourism==='motel'||e.tags.amenity==='hotel'||e.tags.building==='hotel')).length;
+          entertainment=els.filter(e=>e.tags&&(e.tags.leisure||e.tags.amenity==='cinema')).length;
+          restaurants=els.filter(e=>e.tags&&['restaurant','cafe','fast_food'].includes(e.tags.amenity)).length;
+          shops=els.filter(e=>e.tags&&e.tags.shop).length;
+          parkingCount=els.filter(e=>e.tags&&e.tags.amenity==='parking').length;
+          schools=Math.min(els.filter(e=>e.tags&&e.tags.amenity==='school').length, 20); // cap OSM noise
+          gyms=els.filter(e=>e.tags&&e.tags.leisure==='fitness_centre').length;
+          competitors=els.filter(e=>e.tags&&(e.tags.leisure==='escape_game'||e.tags.amenity==='amusement_arcade')).length;
+          offices=els.filter(e=>e.tags&&(e.tags.office||e.tags.building==='office'||e.tags.landuse==='office'||e.tags.landuse==='commercial')).length;
+          poiCount=restaurants+shops;
+          ftScore=poiCount>100?10:poiCount>60?8.5:poiCount>30?7:poiCount>15?5.5:poiCount>5?4:3;
+          anchorScore=Math.min(10,hotels*1.5+entertainment*1.0+offices*0.3);
+          parkScore=parkingCount>5?10:parkingCount>2?8:parkingCount>0?6:3;
+          poiSource='osm';
+        }
+      }catch(e){console.warn('Overpass unavailable, using defaults',e);}
+    }
 
     // Family density score (0-10): schools (OSM) + % under-18 (Census)
     const schoolScore=Math.min(6, schools*0.5);
@@ -1196,7 +1264,7 @@ async function autoScoreRE(propId){
           pctBachelors,pctYoungAdult,pctHHWithKids,
           hotels,offices,entertainment,restaurants,shops,
           schools,gyms,competitors,
-          poiCount,parkingCount
+          poiCount,parkingCount,poiSource
         }
       };
     });
@@ -1325,8 +1393,15 @@ function rRE(){
           ${[['💰','Median Income','$'+Math.round((autoData.medIncome||0)/1000)+'k'],['👤','Median Age',(autoData.medAge||'—')+' yrs'],['👥','Population',(autoData.population||0).toLocaleString()],['🎓','Bachelor\'s+',(autoData.pctBachelors||0)+'%'],['🧑','Ages 18–34',(autoData.pctYoungAdult||0)+'%'],['👶','Under 18',(autoData.pctHHWithKids||0)+'%']].map(([ic,lb,vl])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">${ic} ${lb}</span><strong style="color:#334155">${vl}</strong></div>`).join('')}
         </div>
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
-          <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Nearby POIs</div>
-          ${[['🏨','Hotels (2mi)',autoData.hotels||0],['🏢','Offices (2mi)',autoData.offices||0],['🍕','Restaurants (400m)',autoData.restaurants||0],['🛍','Shops (400m)',autoData.shops||0],['🏫','Schools (2mi)',autoData.schools||0],['💪','Gyms (800m)',autoData.gyms||0],['🎮','Competitors (800m)',autoData.competitors||0]].map(([ic,lb,vl])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">${ic} ${lb}</span><strong style="color:#334155">${vl}</strong></div>`).join('')}
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+            <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px">Nearby POIs</span>
+            ${autoData.poiSource==='google'
+              ?`<span style="font-size:9px;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:1px 5px;font-weight:700">Google Places</span>`
+              :autoData.poiSource==='osm'
+              ?`<span style="font-size:9px;background:#fef3c7;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:700">OpenStreetMap</span>`
+              :`<span style="font-size:9px;background:#f1f5f9;color:#94a3b8;border-radius:3px;padding:1px 5px;font-weight:700">No data</span>`}
+          </div>
+          ${[['🏨',autoData.poiSource==='google'?'Hotels (2mi)':'Hotels (2mi)',autoData.hotels||0],['🏢','Offices (2mi)',autoData.offices||0],['🍕','Restaurants (400m)',autoData.restaurants||0],['🛍','Shops (400m)',autoData.shops||0],['🏫','Schools (5mi)',autoData.schools||0],['💪','Gyms (1mi)',autoData.gyms||0],['🎮','Competitors (800m)',autoData.competitors||0]].map(([ic,lb,vl])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">${ic} ${lb}</span><strong style="color:#334155">${vl}</strong></div>`).join('')}
         </div>
       </div>`:''}
 
@@ -1514,6 +1589,7 @@ function inp(id,val){
   const rm={'r-s':'sessions','r-p':'price','r-u':'util','r-a':'addon'};
   if(rm[id]) {S.rev[rm[id]]=isNaN(n)?0:n;}
   else if(id==='capex-pr'){S.capexPaybackRate=isNaN(n)?90:Math.max(0,Math.min(100,n));}
+  else if(id==='gplaces-key'){S.googlePlacesKey=String(val).trim();}
   else{
     const eqm=id.match(/^eq-(t|p)-(\d+)$/);
     if(eqm){
