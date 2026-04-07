@@ -233,6 +233,7 @@ function opexForRooms(rooms){
   return{rent:mx[0][col],mCogs:mx[1][col],mLabor:mx[2][col],mMktg:mx[3][col],mMisc:mx[4][col]};
 }
 let nid=3;
+let reNextId=2;
 let S={...DEFAULTS,comp:DEFAULTS.comp.map(c=>({...c}))};
 try{const raw=localStorage.getItem('sq-state');if(raw){S=migrateState(JSON.parse(raw));nid=Math.max(...S.units.map(u=>u.id))+1;if(S.reProps&&S.reProps.length)reNextId=Math.max(...S.reProps.map(p=>p.id))+1;}}catch(e){}
 function save(){try{localStorage.setItem('sq-state',JSON.stringify(S));}catch(e){}}
@@ -384,8 +385,6 @@ function reGrade(score){
   if(score>=40)return{g:'D',c:'#dc2626',bg:'#fff1f2'};
   return{g:'F',c:'#7f1d1d',bg:'#fee2e2'};
 }
-let reNextId=2;
-
 // ─── Tab: Locations ────────────────────────────────────────────────────────
 function rLoc(){
   const yrs=[2024,2025,2026,2027,2028,2029,2030];
