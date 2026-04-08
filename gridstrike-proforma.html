@@ -2082,7 +2082,7 @@ function rRE(){
     const totalCapex=p.reCapexAmts?Object.values(p.reCapexAmts).reduce((s,v)=>s+(v||0),0):0;
     const rent=Math.round(((p.baseRent||0)+(p.cams||0))*(p.sqft||0));
     const estEbitda=estRev-totalOpex-rent;
-    const cocMonths=totalCapex>0&&estEbitda>0?(totalCapex/estEbitda).toFixed(1)+' mo':'—';
+    const cocMonths=totalCapex>0&&estEbitda>0?(totalCapex/(estEbitda*0.75)).toFixed(1)+' mo':'—';
     return`<tr style="background:#fff">
       <td><span style="background:${isActive?'#dcfce7':'#f1f5f9'};color:${isActive?'#16a34a':'#64748b'};border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700">${isActive?'ACTIVE':'EVAL'}</span></td>
       <td style="font-weight:600;color:#334155">${esc(p.friendlyName||'—')}</td>
@@ -2110,9 +2110,10 @@ function rRE(){
     <div class="card" style="margin-bottom:16px">
       <div class="card-title">All Locations</div>
       <div style="overflow-x:auto"><table>
-        <thead><tr>${['Status','Friendly Name','Score','Address','Sq Ft','Rooms','Est Rev/mo','Est OPEX/mo','Est EBITDA','Est CAPEX','CoC (mo)'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+        <thead><tr>${['Status','Friendly Name','Score','Address','Sq Ft','Rooms','Est Rev/mo','Est OPEX/mo','Est EBITDA','Est CAPEX','CoC (mo)<sup style="font-size:9px">1</sup>'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
         <tbody>${allLocRows}</tbody>
       </table></div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:6px;padding:0 2px"><sup>1</sup> 25% of monthly EBITDA retained for operational purposes; CoC calculated on remaining 75%.</div>
     </div>
 
     ${propCards}`;
